@@ -196,28 +196,30 @@ class LDAPUserService:
         if "," not in parent and parent:
             parent = f"ou={escape_rdn(parent)},{self.base_dn}"
         dn = f"{rdn},{parent}"
+        object_classes = data.get("object_classes") or ["top", "person", "organizationalPerson", "inetOrgPerson", "posixAccount"]
+        is_posix = "posixaccount" in {str(value).lower() for value in object_classes}
         with self.manager.connection() as conn:
-            uid_number = data.get("uid_number") or self._next_uid(conn)
+            uid_number = (data.get("uid_number") or self._next_uid(conn)) if is_posix else None
             display_name = data.get("display_name") or f"{data['first_name']} {data['last_name']}"
             attrs: dict[str, Any] = {
                 username_attr: username,
                 self.attr("first_name"): data["first_name"],
                 self.attr("last_name"): data["last_name"],
                 self.attr("display_name"): display_name,
-                self.attr("uid"): str(uid_number),
-                self.attr("gid"): str(data["gid_number"]),
                 "cn": display_name,
-                "homeDirectory": data.get("home_directory") or f"/home/{username}",
-                "loginShell": data.get("login_shell") or "/bin/bash",
                 "userPassword": LDAPPasswordService.hash_ssha(data["password"]),
             }
+            if is_posix:
+                attrs[self.attr("uid")] = str(uid_number)
+                attrs[self.attr("gid")] = str(data["gid_number"])
+                attrs["homeDirectory"] = data.get("home_directory") or f"/home/{username}"
+                attrs["loginShell"] = data.get("login_shell") or "/bin/bash"
             if data.get("email"):
                 attrs[self.attr("email")] = data["email"]
             for attr_name, value in (data.get("attributes") or {}).items():
                 if attr_name.lower() == "userpassword":
                     raise ValueError("Use password field for userPassword")
                 attrs[attr_name] = value
-            object_classes = data.get("object_classes") or ["top", "person", "organizationalPerson", "inetOrgPerson", "posixAccount"]
             if not conn.add(dn, object_class=object_classes, attributes=attrs):
                 raise LDAPOperationError("LDAP ADD failed", result=conn.result)
             return {"dn": dn, "username": username, "uid_number": uid_number}
