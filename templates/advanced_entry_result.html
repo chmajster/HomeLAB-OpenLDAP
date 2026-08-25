@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/directory">Directory</a></li><li class="breadcrumb-item"><a href="/directory/entry/{{ encoded_dn }}">Advanced LDAP Editor</a></li><li class="breadcrumb-item active">Result</li></ol></nav>
+<h1 class="h3">LDAP modification result</h1>
+<div class="card mb-4"><div class="card-header">Diff</div><div class="card-body">{% for change in diff.changes %}<div class="mb-3"><strong>{{ change.attribute }}</strong><pre class="diff-view mb-0">- {{ change.old }}
++ {{ change.new }}</pre></div>{% else %}<div class="text-secondary">No differences.</div>{% endfor %}</div></div>
+<div class="card"><div class="card-header">Current entry</div><div class="card-body"><pre>{{ entry }}</pre></div></div>
+<a class="btn btn-primary mt-3" href="/directory/entry/{{ encoded_dn }}">Back to editor</a>
+{% endblock %}
