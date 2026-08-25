@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pl" data-bs-theme="{{ user.theme if user and user.theme != 'system' else 'auto' }}">
+<html lang="pl" data-bs-theme="{{ user.theme if user and user.theme in ['light', 'dark'] else 'light' }}" data-theme-preference="{{ user.theme if user else 'system' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -20,7 +20,9 @@
       <a class="nav-link" href="/directory"><i class="bi bi-diagram-3"></i> LDAP Browser</a>
       <a class="nav-link" href="/users"><i class="bi bi-people"></i> Users</a>
       <a class="nav-link" href="/groups"><i class="bi bi-collection"></i> Groups</a>
+      <a class="nav-link" href="/ous"><i class="bi bi-folder2-open"></i> Organizational Units</a>
       <a class="nav-link" href="/search"><i class="bi bi-search"></i> Search</a>
+      <a class="nav-link" href="/query-builder"><i class="bi bi-funnel"></i> Query Builder</a>
 
       <div class="small text-secondary mt-3 mb-1">Security</div>
       <a class="nav-link" href="/locked-accounts"><i class="bi bi-person-lock"></i> Locked Accounts</a>
@@ -44,9 +46,20 @@
     </nav>
   </aside>
   <main class="flex-grow-1">
-    <header class="border-bottom px-4 py-3 d-flex justify-content-between align-items-center">
+    <header class="border-bottom px-4 py-3 d-flex flex-wrap gap-2 justify-content-between align-items-center">
       <span class="text-secondary">{{ user.username }} · {{ user.role }}</span>
-      <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-secondary">Wyloguj</button></form>
+      <div class="d-flex align-items-center gap-2">
+        <form method="post" action="/appearance" class="d-flex align-items-center gap-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label class="visually-hidden" for="theme-select">Theme</label>
+          <select id="theme-select" class="form-select form-select-sm" name="theme" onchange="this.form.submit()">
+            <option value="light" {{ 'selected' if user.theme == 'light' }}>Light</option>
+            <option value="dark" {{ 'selected' if user.theme == 'dark' }}>Dark</option>
+            <option value="system" {{ 'selected' if user.theme == 'system' }}>System</option>
+          </select>
+        </form>
+        <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-secondary">Wyloguj</button></form>
+      </div>
     </header>
     <div class="container-fluid p-4">{% block content %}{% endblock %}</div>
   </main>
@@ -55,5 +68,6 @@
 <main class="container py-5">{% block public_content %}{% endblock %}</main>
 {% endif %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/app.js"></script>
 </body>
 </html>
