@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     app_name: str = "HomeLAB OpenLDAP Manager"
     app_env: str = "production"
-    web_listen_address: str = "0.0.0.0"
+    web_listen_address: str = "127.0.0.1"
     web_port: int = 8080
     database_url: str = "sqlite:///./homelab-openldap.db"
     secret_key: str = Field(default="dev-change-me")
