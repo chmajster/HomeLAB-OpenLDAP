@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/groups">Groups</a></li><li class="breadcrumb-item active">Create</li></ol></nav>
+<h1 class="h3 mb-4">Create group</h1>
+<div class="card"><div class="card-body">
+<form method="post" action="/directory/groups/create">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="row g-3">
+  <div class="col-md-5"><label class="form-label">Group Name</label><input class="form-control" name="name" required></div>
+  <div class="col-md-4"><label class="form-label">Type</label><select class="form-select" name="group_type"><option>groupOfNames</option><option>groupOfUniqueNames</option><option>posixGroup</option></select></div>
+  <div class="col-md-3"><label class="form-label">GID Number</label><input class="form-control" type="number" name="gid_number" min="1" placeholder="auto"></div>
+</div>
+<p class="text-secondary small mt-3 mb-0">For groupOfNames/groupOfUniqueNames, the initial required member is filled safely by the backend when no member list is supplied. Members can then be managed through LDAP operations.</p>
+<div class="mt-4"><button class="btn btn-primary">Create group</button> <a class="btn btn-outline-secondary" href="/groups">Cancel</a></div>
+</form>
+</div></div>
+{% endblock %}

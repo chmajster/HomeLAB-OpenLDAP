@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/users">Users</a></li><li class="breadcrumb-item active">Create</li></ol></nav>
+<h1 class="h3 mb-4">Create account</h1>
+<div class="card"><div class="card-body">
+<form method="post" action="/directory/users/create">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="row g-3">
+  <div class="col-md-6"><label class="form-label">ObjectClass Template</label><select class="form-select" name="template_name" required>{% for template in objectclass_templates %}<option value="{{ template.name }}" {% if template.name == 'Linux User' %}selected{% endif %}>{{ template.name }} · {{ template.object_classes|join(', ') }}</option>{% endfor %}</select></div>
+  <div class="col-md-6"><label class="form-label">Primary GID</label><input class="form-control" type="number" name="gid_number" min="1" required><div class="form-text">Used when the selected schema includes POSIX attributes.</div></div>
+  <div class="col-md-4"><label class="form-label">Username</label><input class="form-control" name="username" required pattern="[A-Za-z0-9._-]+"></div>
+  <div class="col-md-4"><label class="form-label">First Name</label><input class="form-control" name="first_name" required></div>
+  <div class="col-md-4"><label class="form-label">Last Name</label><input class="form-control" name="last_name" required></div>
+  <div class="col-md-6"><label class="form-label">Display Name</label><input class="form-control" name="display_name"></div>
+  <div class="col-md-6"><label class="form-label">Email</label><input class="form-control" type="email" name="email"></div>
+  <div class="col-md-6"><label class="form-label">Password</label><input class="form-control" type="password" name="password" minlength="8" required autocomplete="new-password"></div>
+  <div class="col-md-6"><label class="form-label">Home Directory</label><input class="form-control" name="home_directory" placeholder="from template or /home/username"></div>
+  <div class="col-md-6"><label class="form-label">Login Shell</label><input class="form-control" name="login_shell" placeholder="from template or /bin/bash"></div>
+  <div class="col-md-6"><label class="form-label">Organizational Unit / Parent DN</label><select class="form-select" name="organizational_unit"><option value="">Configured Users Base DN</option>{% for ou in ous %}<option value="{{ ou.dn }}">{{ ou.dn }}</option>{% endfor %}</select></div>
+</div>
+<div class="alert alert-secondary mt-3 mb-0">UID is allocated automatically from the configured range {{ uid_min }}–{{ uid_max }} only when the selected template uses a POSIX account schema. Template defaults are applied before the LDAP ADD operation.</div>
+<div class="mt-4"><button class="btn btn-primary">Create account</button> <a class="btn btn-outline-secondary" href="/users">Cancel</a></div>
+</form>
+</div></div>
+{% endblock %}

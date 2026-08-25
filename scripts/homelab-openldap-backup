@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+BACKUP_DIR = Path("/var/backups/homelab-openldap-manager")
+NAME_RE = re.compile(r"^ldap-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}\.ldif$")
+
+
+def run(argv: list[str]) -> int:
+    completed = subprocess.run(argv, check=False, shell=False)
+    return completed.returncode
+
+
+def safe_path(name: str) -> Path:
+    if not NAME_RE.fullmatch(name):
+        raise ValueError("Invalid backup filename")
+    path = BACKUP_DIR / name
+    if path.parent != BACKUP_DIR:
+        raise ValueError("Invalid backup path")
+    return path
+
+
+def main() -> int:
+    if os.geteuid() != 0:
+        print("This helper must run as root", file=sys.stderr)
+        return 77
+    if len(sys.argv) < 3:
+        print("Usage: helper create|validate|restore <generated-filename>", file=sys.stderr)
+        return 64
+    action, name = sys.argv[1], sys.argv[2]
+    try:
+        path = safe_path(name)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 64
+    BACKUP_DIR.mkdir(mode=0o750, parents=True, exist_ok=True)
+
+    if action == "create":
+        if path.exists():
+            print("Backup already exists", file=sys.stderr)
+            return 65
+        rc = run(["/usr/sbin/slapcat", "-n", "1", "-l", str(path)])
+        if rc == 0:
+            os.chmod(path, 0o640)
+        return rc
+    if action == "validate":
+        if not path.is_file():
+            return 66
+        return run(["/usr/sbin/slapadd", "-u", "-n", "1", "-l", str(path)])
+    if action == "restore":
+        if not path.is_file():
+            return 66
+        if run(["/usr/sbin/slapadd", "-u", "-n", "1", "-l", str(path)]) != 0:
+            return 65
+        if run(["/usr/bin/systemctl", "stop", "slapd"]) != 0:
+            return 69
+        try:
+            rc = run(["/usr/sbin/slapadd", "-n", "1", "-l", str(path)])
+            if rc != 0:
+                return rc
+            run(["/usr/bin/chown", "-R", "openldap:openldap", "/var/lib/ldap"])
+            return 0
+        finally:
+            run(["/usr/bin/systemctl", "start", "slapd"])
+    print("Unsupported action", file=sys.stderr)
+    return 64
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

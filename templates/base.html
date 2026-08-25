@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pl" data-bs-theme="{{ user.theme if user and user.theme in ['light', 'dark'] else 'light' }}" data-theme-preference="{{ user.theme if user else 'system' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="/static/app.css" rel="stylesheet">
+</head>
+<body>
+{% if user %}
+<div class="d-flex min-vh-100">
+  <aside class="sidebar border-end p-3">
+    <a class="navbar-brand fw-semibold d-block mb-4" href="/dashboard">HomeLAB OpenLDAP</a>
+    <nav class="nav flex-column gap-1">
+      <a class="nav-link" href="/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a>
+      <div class="small text-secondary mt-3 mb-1">Directory</div>
+      <a class="nav-link" href="/directory"><i class="bi bi-diagram-3"></i> LDAP Browser</a>
+      <a class="nav-link" href="/users"><i class="bi bi-people"></i> Users</a>
+      <a class="nav-link" href="/groups"><i class="bi bi-collection"></i> Groups</a>
+      <a class="nav-link" href="/ous"><i class="bi bi-folder2-open"></i> Organizational Units</a>
+      <a class="nav-link" href="/search"><i class="bi bi-search"></i> Search</a>
+      <a class="nav-link" href="/query-builder"><i class="bi bi-funnel"></i> Query Builder</a>
+      <a class="nav-link" href="/bulk"><i class="bi bi-list-check"></i> Bulk Operations</a>
+      <div class="small text-secondary mt-3 mb-1">Security</div>
+      <a class="nav-link" href="/locked-accounts"><i class="bi bi-person-lock"></i> Locked Accounts</a>
+      <a class="nav-link" href="/password-policy"><i class="bi bi-shield-lock"></i> Password Policy</a>
+      <div class="small text-secondary mt-3 mb-1">Tools</div>
+      <a class="nav-link" href="/ldif"><i class="bi bi-file-earmark-code"></i> LDIF</a>
+      <a class="nav-link" href="/schema"><i class="bi bi-braces"></i> Schema Browser</a>
+      {% if user.role == 'Administrator' %}<a class="nav-link" href="/backups"><i class="bi bi-archive"></i> Backups</a>{% endif %}
+      <a class="nav-link" href="/ldap-test"><i class="bi bi-activity"></i> LDAP Test</a>
+      <div class="small text-secondary mt-3 mb-1">Administration</div>
+      <a class="nav-link" href="/audit"><i class="bi bi-journal-text"></i> Audit</a>
+      <a class="nav-link" href="/sessions"><i class="bi bi-pc-display"></i> Sessions</a>
+      {% if user.role == 'Administrator' %}
+      <a class="nav-link" href="/api-tokens"><i class="bi bi-key"></i> API Tokens</a>
+      <a class="nav-link" href="/administrators"><i class="bi bi-person-gear"></i> Administrators</a>
+      <a class="nav-link" href="/logs"><i class="bi bi-terminal"></i> Logs</a>
+      <a class="nav-link" href="/system"><i class="bi bi-cpu"></i> System</a>
+      <a class="nav-link" href="/settings"><i class="bi bi-gear"></i> Settings</a>
+      {% endif %}
+    </nav>
+  </aside>
+  <main class="flex-grow-1">
+    <header class="border-bottom px-4 py-3 d-flex flex-wrap gap-2 justify-content-between align-items-center">
+      <span class="text-secondary">{{ user.username }} · {{ user.role }} · {{ user.auth_source }}</span>
+      <div class="d-flex align-items-center gap-2">
+        <form method="post" action="/appearance" class="d-flex align-items-center gap-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label class="visually-hidden" for="theme-select">Theme</label>
+          <select id="theme-select" class="form-select form-select-sm" name="theme" onchange="this.form.submit()">
+            <option value="light" {{ 'selected' if user.theme == 'light' }}>Light</option>
+            <option value="dark" {{ 'selected' if user.theme == 'dark' }}>Dark</option>
+            <option value="system" {{ 'selected' if user.theme == 'system' }}>System</option>
+          </select>
+        </form>
+        <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-secondary">Wyloguj</button></form>
+      </div>
+    </header>
+    <div class="container-fluid p-4">{% block content %}{% endblock %}</div>
+  </main>
+</div>
+{% else %}
+<main class="container py-5">{% block public_content %}{% endblock %}</main>
+{% endif %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

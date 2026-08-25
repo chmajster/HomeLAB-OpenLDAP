@@ -1,0 +1,50 @@
+name: Tests
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: sudo apt-get update && sudo apt-get install -y libldap2-dev libsasl2-dev
+      - run: pip install -r requirements.txt
+      - run: pytest --cov=app --cov-report=term-missing
+
+  real-openldap:
+    runs-on: ubuntu-latest
+    services:
+      openldap:
+        image: osixia/openldap:1.5.0
+        env:
+          LDAP_ORGANISATION: HomeLAB
+          LDAP_DOMAIN: example.org
+          LDAP_ADMIN_PASSWORD: admin
+        ports:
+          - 389:389
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: sudo apt-get update && sudo apt-get install -y libldap2-dev libsasl2-dev ldap-utils
+      - run: pip install -r requirements.txt
+      - name: Wait for OpenLDAP
+        run: |
+          for i in $(seq 1 30); do
+            if ldapwhoami -x -H ldap://127.0.0.1:389 -D cn=admin,dc=example,dc=org -w admin >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Real OpenLDAP integration tests
+        env:
+          LDAP_INTEGRATION_URL: ldap://127.0.0.1:389
+          LDAP_INTEGRATION_BASE_DN: dc=example,dc=org
+          LDAP_INTEGRATION_BIND_DN: cn=admin,dc=example,dc=org
+          LDAP_INTEGRATION_BIND_PASSWORD: admin
+        run: pytest tests/integration/test_real_ldap.py -q

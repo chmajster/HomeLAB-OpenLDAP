@@ -1,0 +1,31 @@
+[Unit]
+Description=HomeLAB OpenLDAP Manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=homelab-ldap
+Group=homelab-ldap
+WorkingDirectory=/opt/homelab-openldap-manager
+EnvironmentFile=/etc/homelab-openldap-manager/app.env
+ExecStart=/opt/homelab-openldap-manager/venv/bin/uvicorn app.main:app --host ${WEB_LISTEN_ADDRESS} --port ${WEB_PORT} --workers 2 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+PrivateDevices=true
+MemoryDenyWriteExecute=true
+RestrictNamespaces=true
+ReadWritePaths=/var/lib/homelab-openldap-manager /var/log/homelab-openldap-manager /var/backups/homelab-openldap-manager
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target
