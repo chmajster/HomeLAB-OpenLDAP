@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Access · {{ username }} · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1">Access · {{ username }}</h1>
+    <div class="text-secondary">{{ ldap_user.dn }}</div>
+  </div>
+  <a class="btn btn-outline-secondary" href="/users/{{ username }}">Back to user</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-7">
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between"><span>Command access (sudoRole)</span><span class="badge text-bg-secondary">{{ sudo_roles|length }}</span></div>
+      <div class="card-body">
+        {% for role in sudo_roles %}
+        <div class="border rounded p-3 mb-3">
+          <div class="d-flex justify-content-between gap-2"><strong>{{ role.cn|first if role.cn is iterable and role.cn is not string else role.cn }}</strong><code>{{ role.dn }}</code></div>
+          <div class="small text-secondary mt-2">Hosts</div><pre class="mb-2">{{ role.sudoHost }}</pre>
+          <div class="small text-secondary">Commands</div><pre class="mb-2">{{ role.sudoCommand }}</pre>
+          <div class="small text-secondary">Run as</div><pre class="mb-2">{{ role.sudoRunAsUser }}</pre>
+          {% if role.sudoOption %}<div class="small text-secondary">Options</div><pre>{{ role.sudoOption }}</pre>{% endif %}
+          {% if user.role != 'Read Only' %}
+          <form method="post" action="/users/{{ username }}/command-access/delete" class="d-flex gap-2 align-items-center">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="role_name" value="{{ role.cn|first if role.cn is iterable and role.cn is not string else role.cn }}">
+            <input class="form-control form-control-sm" name="confirmation" placeholder="DELETE {{ role.cn|first if role.cn is iterable and role.cn is not string else role.cn }}" required>
+            <button class="btn btn-sm btn-outline-danger">Delete role</button>
+          </form>
+          {% endif %}
+        </div>
+        {% else %}<p class="text-secondary">No sudoRole entries assigned directly to this user.</p>{% endfor %}
+
+        {% if user.role != 'Read Only' %}
+        <hr>
+        <h2 class="h5">Create or update user command role</h2>
+        <form method="post" action="/users/{{ username }}/command-access">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label">Role name</label><input class="form-control" name="role_name" placeholder="user-{{ username }}"><div class="form-text">Leave empty for user-{{ username }}.</div></div>
+            <div class="col-md-6"><label class="form-label">sudoOrder</label><input class="form-control" type="number" min="0" max="999999" name="order"></div>
+            <div class="col-12"><label class="form-label">Commands</label><textarea class="form-control font-monospace" rows="5" name="commands" placeholder="/usr/bin/systemctl restart nginx&#10;/usr/bin/journalctl -u nginx" required></textarea><div class="form-text">One command per line. Use ALL only intentionally. Prefix a command with ! to deny it.</div></div>
+            <div class="col-md-6"><label class="form-label">Hosts</label><textarea class="form-control" rows="3" name="hosts">ALL</textarea></div>
+            <div class="col-md-6"><label class="form-label">Run as users</label><textarea class="form-control" rows="3" name="run_as_users">root</textarea></div>
+            <div class="col-md-6"><label class="form-label">Run as groups</label><textarea class="form-control" rows="2" name="run_as_groups"></textarea></div>
+            <div class="col-md-6"><label class="form-label">sudoOption</label><textarea class="form-control" rows="2" name="options" placeholder="!authenticate"></textarea></div>
+            <div class="col-md-6"><label class="form-label">Confirmation</label><input class="form-control" name="confirmation" placeholder="APPLY" required></div>
+            <div class="col-md-6 d-flex align-items-end"><button class="btn btn-primary w-100">Save command access</button></div>
+          </div>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex justify-content-between"><span>SSH public keys</span><span class="badge text-bg-secondary">{{ ssh_keys|length }}</span></div>
+      <div class="card-body">
+        {% for item in ssh_keys %}
+        <div class="border rounded p-3 mb-3">
+          <div class="d-flex flex-wrap justify-content-between gap-2"><code>{{ item.fingerprint }}</code><span>{{ item.type }}</span></div>
+          {% if item.comment %}<div class="text-secondary small mt-1">{{ item.comment }}</div>{% endif %}
+          <pre class="text-wrap small mt-2">{{ item.key }}</pre>
+          {% if user.role != 'Read Only' %}
+          <form method="post" action="/users/{{ username }}/ssh-keys/delete" class="d-flex gap-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="public_key" value="{{ item.key }}">
+            <input class="form-control form-control-sm" name="confirmation" placeholder="APPLY" required><button class="btn btn-sm btn-outline-danger">Delete key</button>
+          </form>
+          {% endif %}
+        </div>
+        {% else %}<p class="text-secondary">No SSH keys.</p>{% endfor %}
+        {% if user.role != 'Read Only' %}
+        <form method="post" action="/users/{{ username }}/ssh-keys/add">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label class="form-label">OpenSSH public key</label><textarea class="form-control font-monospace" rows="4" name="public_key" required></textarea>
+          <div class="row g-2 mt-1"><div class="col-md-8"><input class="form-control" name="confirmation" placeholder="APPLY" required></div><div class="col-md-4"><button class="btn btn-primary w-100">Add key</button></div></div>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-5">
+    <div class="card mb-4">
+      <div class="card-header">Account lifecycle</div>
+      <div class="card-body">
+        <dl class="row mb-3"><dt class="col-5">State</dt><dd class="col-7"><span class="badge {{ 'text-bg-success' if lifecycle.state == 'Active' else 'text-bg-warning' }}">{{ lifecycle.state }}</span></dd><dt class="col-5">Expires</dt><dd class="col-7">{{ lifecycle.expires_on or 'Never' }}</dd><dt class="col-5">Password reset</dt><dd class="col-7">{{ 'Required' if lifecycle.password_reset_required else 'No' }}</dd></dl>
+        {% if user.role != 'Read Only' %}
+        <form method="post" action="/users/{{ username }}/lifecycle" class="mb-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="confirmation" value="APPLY">
+          <div class="btn-group w-100"><button class="btn btn-outline-success" name="action" value="enable">Enable</button><button class="btn btn-outline-warning" name="action" value="disable">Disable</button></div>
+        </form>
+        <form method="post" action="/users/{{ username }}/lifecycle" class="mb-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="set_expiry"><input type="hidden" name="confirmation" value="APPLY">
+          <label class="form-label">Account expiry</label><div class="input-group"><input class="form-control" type="date" name="expires_on" required><button class="btn btn-outline-primary">Set</button></div>
+        </form>
+        <form method="post" action="/users/{{ username }}/lifecycle" class="mb-3"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="clear_expiry"><input type="hidden" name="confirmation" value="APPLY"><button class="btn btn-outline-secondary w-100">Clear expiry</button></form>
+        <form method="post" action="/users/{{ username }}/lifecycle"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="confirmation" value="APPLY"><div class="btn-group w-100"><button class="btn btn-outline-danger" name="action" value="require_password_change">Require password change</button><button class="btn btn-outline-secondary" name="action" value="clear_password_change">Clear flag</button></div></form>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if user.role == 'Administrator' %}
+    <div class="card">
+      <div class="card-header">Password policy assignment</div>
+      <div class="card-body">
+        <form method="post" action="/users/{{ username }}/password-policy">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label class="form-label">Policy</label><select class="form-select" name="policy_name"><option value="">Default / none</option>{% for policy in policies %}<option value="{{ policy.cn|first if policy.cn is iterable and policy.cn is not string else policy.cn }}">{{ policy.cn|first if policy.cn is iterable and policy.cn is not string else policy.cn }}</option>{% endfor %}</select>
+          <input class="form-control mt-2" name="confirmation" placeholder="APPLY" required><button class="btn btn-primary w-100 mt-2">Assign policy</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

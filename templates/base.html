@@ -25,7 +25,12 @@
       <a class="nav-link" href="/bulk"><i class="bi bi-list-check"></i> Bulk Operations</a>
       <div class="small text-secondary mt-3 mb-1">Security</div>
       <a class="nav-link" href="/locked-accounts"><i class="bi bi-person-lock"></i> Locked Accounts</a>
-      <a class="nav-link" href="/password-policy"><i class="bi bi-shield-lock"></i> Password Policy</a>
+      <a class="nav-link" href="/password-policy"><i class="bi bi-shield-lock"></i> Password Policy Status</a>
+      {% if user.role == 'Administrator' %}
+      <a class="nav-link" href="/password-policies"><i class="bi bi-shield-check"></i> Password Policies</a>
+      <a class="nav-link" href="/acl-manager"><i class="bi bi-lock"></i> ACL Manager</a>
+      <a class="nav-link" href="/replication"><i class="bi bi-arrow-repeat"></i> Replication</a>
+      {% endif %}
       <div class="small text-secondary mt-3 mb-1">Tools</div>
       <a class="nav-link" href="/ldif"><i class="bi bi-file-earmark-code"></i> LDIF</a>
       <a class="nav-link" href="/schema"><i class="bi bi-braces"></i> Schema Browser</a>
