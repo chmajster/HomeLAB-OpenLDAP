@@ -1,0 +1,1 @@
+homelab-ldap ALL=(root) NOPASSWD: /usr/local/libexec/homelab-openldap-backup create *, /usr/local/libexec/homelab-openldap-backup validate *, /usr/local/libexec/homelab-openldap-backup restore *
