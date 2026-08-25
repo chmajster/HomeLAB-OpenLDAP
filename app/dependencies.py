@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 import time
 from dataclasses import dataclass
@@ -15,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.ldap.connection import LDAPConnectionManager, LDAPSettings
-from app.models import APIToken, LDAPServer, PanelUser
+from app.models import APIToken, AppSetting, LDAPServer, PanelUser
 from app.security import decrypt_secret, hash_api_token
 from app.session_store import active_session
 
@@ -27,7 +28,15 @@ ROLE_PERMISSIONS = {
     "Read Only": {"ldap.read", "ldap.users.read", "ldap.groups.read", "ldap.ou.read", "ldap.schema.read", "audit.read"},
 }
 
-_MANAGER_CACHE_TTL = 300.0
+DEFAULT_ATTRIBUTE_MAPPING = {
+    "username": "uid",
+    "email": "mail",
+    "first_name": "givenName",
+    "last_name": "sn",
+    "display_name": "displayName",
+    "uid": "uidNumber",
+    "gid": "gidNumber",
+}
 _MANAGER_CACHE: dict[tuple, tuple[float, LDAPConnectionManager]] = {}
 _MANAGER_CACHE_LOCK = Lock()
 
@@ -87,13 +96,31 @@ def _secret_fingerprint(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
-def _cached_manager(key: tuple, ldap_settings: LDAPSettings) -> LDAPConnectionManager:
+def _attribute_mapping(db: Session) -> dict[str, str]:
+    row = db.get(AppSetting, "ldap.attribute_mapping")
+    if not row:
+        return dict(DEFAULT_ATTRIBUTE_MAPPING)
+    try:
+        data = json.loads(row.value)
+    except json.JSONDecodeError:
+        return dict(DEFAULT_ATTRIBUTE_MAPPING)
+    if not isinstance(data, dict):
+        return dict(DEFAULT_ATTRIBUTE_MAPPING)
+    result = dict(DEFAULT_ATTRIBUTE_MAPPING)
+    for key in result:
+        value = data.get(key)
+        if isinstance(value, str) and value:
+            result[key] = value
+    return result
+
+
+def _cached_manager(key: tuple, ldap_settings: LDAPSettings, ttl: int) -> LDAPConnectionManager:
     now = time.monotonic()
     with _MANAGER_CACHE_LOCK:
         cached = _MANAGER_CACHE.get(key)
-        if cached and now - cached[0] < _MANAGER_CACHE_TTL:
+        if cached and now - cached[0] < ttl:
             return cached[1]
-        expired = [cache_key for cache_key, (created, _) in _MANAGER_CACHE.items() if now - created >= _MANAGER_CACHE_TTL]
+        expired = [cache_key for cache_key, (created, _) in _MANAGER_CACHE.items() if now - created >= ttl]
         for cache_key in expired:
             _, manager = _MANAGER_CACHE.pop(cache_key)
             manager.close()
@@ -104,6 +131,8 @@ def _cached_manager(key: tuple, ldap_settings: LDAPSettings) -> LDAPConnectionMa
 
 def get_ldap_manager(db: Session = Depends(get_db)) -> LDAPConnectionManager:
     settings = get_settings()
+    mapping = _attribute_mapping(db)
+    mapping_key = tuple(sorted(mapping.items()))
     server = db.scalar(select(LDAPServer).where(LDAPServer.enabled.is_(True)).order_by(LDAPServer.id.asc()))
     if server:
         bind_password = decrypt_secret(server.encrypted_bind_password)
@@ -118,6 +147,7 @@ def get_ldap_manager(db: Session = Depends(get_db)) -> LDAPConnectionManager:
             connect_timeout=server.connect_timeout,
             users_base_dn=server.users_base_dn,
             groups_base_dn=server.groups_base_dn,
+            attribute_mapping=mapping,
         )
         key = (
             "db",
@@ -132,8 +162,9 @@ def get_ldap_manager(db: Session = Depends(get_db)) -> LDAPConnectionManager:
             server.connect_timeout,
             server.users_base_dn,
             server.groups_base_dn,
+            mapping_key,
         )
-        return _cached_manager(key, ldap_settings)
+        return _cached_manager(key, ldap_settings, settings.ldap_cache_ttl)
     if settings.ldap_url and settings.ldap_base_dn and settings.ldap_bind_dn and settings.ldap_bind_password:
         ldap_settings = LDAPSettings(
             url=settings.ldap_url,
@@ -146,6 +177,7 @@ def get_ldap_manager(db: Session = Depends(get_db)) -> LDAPConnectionManager:
             connect_timeout=settings.ldap_connect_timeout,
             users_base_dn=settings.users_base_dn,
             groups_base_dn=settings.groups_base_dn,
+            attribute_mapping=mapping,
         )
         key = (
             "env",
@@ -159,6 +191,7 @@ def get_ldap_manager(db: Session = Depends(get_db)) -> LDAPConnectionManager:
             settings.ldap_connect_timeout,
             settings.users_base_dn,
             settings.groups_base_dn,
+            mapping_key,
         )
-        return _cached_manager(key, ldap_settings)
+        return _cached_manager(key, ldap_settings, settings.ldap_cache_ttl)
     raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LDAP server is not configured")
