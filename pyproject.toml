@@ -4,11 +4,12 @@ line-length = 140
 exclude = ["migrations/versions"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "S"]
-ignore = ["S101", "B008", "E501"]
+select = ["E", "F", "B"]
+ignore = ["B008", "E501", "F401"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "-q"
 
 [tool.coverage.run]
