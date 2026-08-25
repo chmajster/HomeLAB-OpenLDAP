@@ -13,8 +13,10 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.advanced_api import router as advanced_api_router
 from app.api import router as api_router
+from app.completion_web import router as completion_web_router
 from app.config import get_settings
 from app.database import init_db
+from app.directory_web import router as directory_web_router
 from app.ldap.connection import LDAPOperationError
 from app.tools_api import router as tools_api_router
 from app.tools_web import router as tools_web_router
@@ -40,7 +42,7 @@ async def request_security_middleware(request: Request, call_next):
     request_id = supplied if REQUEST_ID_RE.fullmatch(supplied) else "req_" + secrets.token_hex(12)
     request.state.request_id = request_id
 
-    if request.url.path == "/login" and request.method.upper() == "POST":
+    if request.url.path in {"/login", "/ldap-login"} and request.method.upper() == "POST":
         source = request.client.host if request.client else "unknown"
         now = time.monotonic()
         attempts = LOGIN_ATTEMPTS[source]
@@ -84,4 +86,6 @@ app.include_router(api_router)
 app.include_router(tools_api_router)
 app.include_router(advanced_api_router)
 app.include_router(web_router)
+app.include_router(directory_web_router)
 app.include_router(tools_web_router)
+app.include_router(completion_web_router)

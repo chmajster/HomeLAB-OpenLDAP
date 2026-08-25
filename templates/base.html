@@ -15,7 +15,6 @@
     <a class="navbar-brand fw-semibold d-block mb-4" href="/dashboard">HomeLAB OpenLDAP</a>
     <nav class="nav flex-column gap-1">
       <a class="nav-link" href="/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a>
-
       <div class="small text-secondary mt-3 mb-1">Directory</div>
       <a class="nav-link" href="/directory"><i class="bi bi-diagram-3"></i> LDAP Browser</a>
       <a class="nav-link" href="/users"><i class="bi bi-people"></i> Users</a>
@@ -23,19 +22,18 @@
       <a class="nav-link" href="/ous"><i class="bi bi-folder2-open"></i> Organizational Units</a>
       <a class="nav-link" href="/search"><i class="bi bi-search"></i> Search</a>
       <a class="nav-link" href="/query-builder"><i class="bi bi-funnel"></i> Query Builder</a>
-
+      <a class="nav-link" href="/bulk"><i class="bi bi-list-check"></i> Bulk Operations</a>
       <div class="small text-secondary mt-3 mb-1">Security</div>
       <a class="nav-link" href="/locked-accounts"><i class="bi bi-person-lock"></i> Locked Accounts</a>
       <a class="nav-link" href="/password-policy"><i class="bi bi-shield-lock"></i> Password Policy</a>
-
       <div class="small text-secondary mt-3 mb-1">Tools</div>
       <a class="nav-link" href="/ldif"><i class="bi bi-file-earmark-code"></i> LDIF</a>
       <a class="nav-link" href="/schema"><i class="bi bi-braces"></i> Schema Browser</a>
       {% if user.role == 'Administrator' %}<a class="nav-link" href="/backups"><i class="bi bi-archive"></i> Backups</a>{% endif %}
       <a class="nav-link" href="/ldap-test"><i class="bi bi-activity"></i> LDAP Test</a>
-
       <div class="small text-secondary mt-3 mb-1">Administration</div>
       <a class="nav-link" href="/audit"><i class="bi bi-journal-text"></i> Audit</a>
+      <a class="nav-link" href="/sessions"><i class="bi bi-pc-display"></i> Sessions</a>
       {% if user.role == 'Administrator' %}
       <a class="nav-link" href="/api-tokens"><i class="bi bi-key"></i> API Tokens</a>
       <a class="nav-link" href="/administrators"><i class="bi bi-person-gear"></i> Administrators</a>
@@ -47,7 +45,7 @@
   </aside>
   <main class="flex-grow-1">
     <header class="border-bottom px-4 py-3 d-flex flex-wrap gap-2 justify-content-between align-items-center">
-      <span class="text-secondary">{{ user.username }} · {{ user.role }}</span>
+      <span class="text-secondary">{{ user.username }} · {{ user.role }} · {{ user.auth_source }}</span>
       <div class="d-flex align-items-center gap-2">
         <form method="post" action="/appearance" class="d-flex align-items-center gap-2">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
