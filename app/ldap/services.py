@@ -15,6 +15,24 @@ from app.ldap.connection import LDAPConnectionManager, LDAPOperationError
 
 
 SCOPES = {"BASE": BASE, "LEVEL": LEVEL, "SUBTREE": SUBTREE}
+DEFAULT_USER_MAPPING = {
+    "username": "uid",
+    "email": "mail",
+    "first_name": "givenName",
+    "last_name": "sn",
+    "display_name": "displayName",
+    "uid": "uidNumber",
+    "gid": "gidNumber",
+}
+CANONICAL_USER_FIELDS = {
+    "username": "uid",
+    "email": "mail",
+    "first_name": "givenName",
+    "last_name": "sn",
+    "display_name": "displayName",
+    "uid": "uidNumber",
+    "gid": "gidNumber",
+}
 
 
 def _entry_to_dict(entry: Any) -> dict[str, Any]:
@@ -82,49 +100,86 @@ class LDAPSearchService:
 
 
 class LDAPUserService:
-    DEFAULT_ATTRIBUTES = ["uid", "cn", "displayName", "givenName", "sn", "mail", "uidNumber", "gidNumber", "homeDirectory", "loginShell", "pwdAccountLockedTime"]
-
     def __init__(self, manager: LDAPConnectionManager, uid_min: int = 10000, uid_max: int = 60000):
         self.manager = manager
         self.uid_min = uid_min
         self.uid_max = uid_max
 
     @property
+    def mapping(self) -> dict[str, str]:
+        result = dict(DEFAULT_USER_MAPPING)
+        result.update(self.manager.settings.attribute_mapping or {})
+        return result
+
+    def attr(self, logical_name: str) -> str:
+        return self.mapping[logical_name]
+
+    @property
     def base_dn(self) -> str:
         return self.manager.settings.users_base_dn or self.manager.settings.base_dn
 
+    @property
+    def default_attributes(self) -> list[str]:
+        return list(dict.fromkeys([*self.mapping.values(), "cn", "homeDirectory", "loginShell", "pwdAccountLockedTime", "objectClass"]))
+
+    def _canonicalize(self, entry: dict[str, Any]) -> dict[str, Any]:
+        result = dict(entry)
+        for logical, canonical in CANONICAL_USER_FIELDS.items():
+            source = self.attr(logical)
+            if source in entry:
+                result[canonical] = entry[source]
+        return result
+
     def list(self, *, search: str | None = None, page_size: int = 50, cookie: bytes | None = None) -> dict[str, Any]:
         safe = escape_filter_chars(search) if search else None
-        ldap_filter = f"(&(objectClass=person)(|(uid=*{safe}*)(cn=*{safe}*)(mail=*{safe}*)))" if safe else "(&(objectClass=person)(uid=*))"
+        username_attr = self.attr("username")
+        display_attr = self.attr("display_name")
+        email_attr = self.attr("email")
+        ldap_filter = (
+            f"(&(objectClass=person)(|({username_attr}=*{safe}*)({display_attr}=*{safe}*)({email_attr}=*{safe}*)(cn=*{safe}*)))"
+            if safe
+            else f"(&(objectClass=person)({username_attr}=*))"
+        )
         with self.manager.connection() as conn:
-            conn.search(self.base_dn, ldap_filter, SUBTREE, attributes=self.DEFAULT_ATTRIBUTES,
-                        paged_size=min(max(page_size, 1), 500), paged_cookie=cookie)
+            conn.search(
+                self.base_dn,
+                ldap_filter,
+                SUBTREE,
+                attributes=self.default_attributes,
+                paged_size=min(max(page_size, 1), 500),
+                paged_cookie=cookie,
+            )
             _ensure_success(conn, "SEARCH")
             controls = conn.result.get("controls", {})
             page_control = controls.get("1.2.840.113556.1.4.319", {}).get("value", {})
             next_cookie = page_control.get("cookie") or b""
             return {
-                "items": [_entry_to_dict(e) for e in conn.entries],
+                "items": [self._canonicalize(_entry_to_dict(entry)) for entry in conn.entries],
                 "next_cookie": base64.b64encode(next_cookie).decode() if next_cookie else None,
             }
 
     def get(self, username: str) -> dict[str, Any] | None:
         safe = escape_filter_chars(username)
+        username_attr = self.attr("username")
         with self.manager.connection() as conn:
-            conn.search(self.base_dn, f"(&(objectClass=person)(uid={safe}))", SUBTREE, attributes=["*", "+"], size_limit=2)
+            conn.search(self.base_dn, f"(&(objectClass=person)({username_attr}={safe}))", SUBTREE, attributes=["*", "+"], size_limit=2)
             _ensure_success(conn, "SEARCH")
             if not conn.entries:
                 return None
-            return _entry_to_dict(conn.entries[0])
+            return self._canonicalize(_entry_to_dict(conn.entries[0]))
 
     def _next_uid(self, conn: Any) -> int:
-        conn.search(self.base_dn, "(uidNumber=*)", SUBTREE, attributes=["uidNumber"])
+        uid_attr = self.attr("uid")
+        conn.search(self.base_dn, f"({uid_attr}=*)", SUBTREE, attributes=[uid_attr])
         _ensure_success(conn, "SEARCH")
         values = []
         for entry in conn.entries:
+            raw = entry.entry_attributes_as_dict.get(uid_attr)
+            if isinstance(raw, list):
+                raw = raw[0] if raw else None
             try:
-                values.append(int(entry.uidNumber.value))
-            except (AttributeError, TypeError, ValueError):
+                values.append(int(raw))
+            except (TypeError, ValueError):
                 continue
         candidate = max(values, default=self.uid_min - 1) + 1
         if candidate < self.uid_min:
@@ -135,28 +190,35 @@ class LDAPUserService:
 
     def create(self, data: dict[str, Any]) -> dict[str, Any]:
         username = data["username"]
-        rdn = f"uid={escape_rdn(username)}"
+        username_attr = self.attr("username")
+        rdn = f"{username_attr}={escape_rdn(username)}"
         parent = data.get("organizational_unit") or self.base_dn
         if "," not in parent and parent:
             parent = f"ou={escape_rdn(parent)},{self.base_dn}"
         dn = f"{rdn},{parent}"
         with self.manager.connection() as conn:
             uid_number = data.get("uid_number") or self._next_uid(conn)
-            attrs = {
-                "uid": username,
-                "cn": data.get("display_name") or f"{data['first_name']} {data['last_name']}",
-                "givenName": data["first_name"],
-                "sn": data["last_name"],
-                "displayName": data.get("display_name") or f"{data['first_name']} {data['last_name']}",
-                "uidNumber": str(uid_number),
-                "gidNumber": str(data["gid_number"]),
+            display_name = data.get("display_name") or f"{data['first_name']} {data['last_name']}"
+            attrs: dict[str, Any] = {
+                username_attr: username,
+                self.attr("first_name"): data["first_name"],
+                self.attr("last_name"): data["last_name"],
+                self.attr("display_name"): display_name,
+                self.attr("uid"): str(uid_number),
+                self.attr("gid"): str(data["gid_number"]),
+                "cn": display_name,
                 "homeDirectory": data.get("home_directory") or f"/home/{username}",
                 "loginShell": data.get("login_shell") or "/bin/bash",
                 "userPassword": LDAPPasswordService.hash_ssha(data["password"]),
             }
             if data.get("email"):
-                attrs["mail"] = data["email"]
-            if not conn.add(dn, object_class=data.get("object_classes") or ["top", "person", "organizationalPerson", "inetOrgPerson", "posixAccount"], attributes=attrs):
+                attrs[self.attr("email")] = data["email"]
+            for attr_name, value in (data.get("attributes") or {}).items():
+                if attr_name.lower() == "userpassword":
+                    raise ValueError("Use password field for userPassword")
+                attrs[attr_name] = value
+            object_classes = data.get("object_classes") or ["top", "person", "organizationalPerson", "inetOrgPerson", "posixAccount"]
+            if not conn.add(dn, object_class=object_classes, attributes=attrs):
                 raise LDAPOperationError("LDAP ADD failed", result=conn.result)
             return {"dn": dn, "username": username, "uid_number": uid_number}
 
@@ -165,17 +227,22 @@ class LDAPUserService:
         if not current:
             raise KeyError(username)
         mapping = {
-            "first_name": "givenName", "last_name": "sn", "display_name": "displayName",
-            "email": "mail", "gid_number": "gidNumber", "home_directory": "homeDirectory", "login_shell": "loginShell",
+            "first_name": self.attr("first_name"),
+            "last_name": self.attr("last_name"),
+            "display_name": self.attr("display_name"),
+            "email": self.attr("email"),
+            "gid_number": self.attr("gid"),
+            "home_directory": "homeDirectory",
+            "login_shell": "loginShell",
         }
         modifications = {}
-        for key, attr in mapping.items():
+        for key, attr_name in mapping.items():
             if changes.get(key) is not None:
-                modifications[attr] = [(MODIFY_REPLACE, [str(changes[key])])]
-        for attr, value in (changes.get("attributes") or {}).items():
-            if attr.lower() == "userpassword":
+                modifications[attr_name] = [(MODIFY_REPLACE, [str(changes[key])])]
+        for attr_name, value in (changes.get("attributes") or {}).items():
+            if attr_name.lower() == "userpassword":
                 raise ValueError("Use password reset endpoint for userPassword")
-            modifications[attr] = [(MODIFY_REPLACE, value if isinstance(value, list) else [value])]
+            modifications[attr_name] = [(MODIFY_REPLACE, value if isinstance(value, list) else [value])]
         if not modifications:
             return current
         with self.manager.connection() as conn:
@@ -197,7 +264,6 @@ class LDAPUserService:
         if not current:
             raise KeyError(username)
         with self.manager.connection() as conn:
-            # pwdAccountLockedTime=000001010000Z is understood by OpenLDAP ppolicy when available.
             if not conn.modify(current["dn"], {"pwdAccountLockedTime": [(MODIFY_REPLACE, ["000001010000Z"])]}):
                 raise LDAPOperationError("LDAP disable failed; ppolicy may be unavailable", result=conn.result)
 
@@ -227,31 +293,49 @@ class LDAPGroupService:
         self.gid_max = gid_max
 
     @property
+    def gid_attribute(self) -> str:
+        mapping = dict(DEFAULT_USER_MAPPING)
+        mapping.update(self.manager.settings.attribute_mapping or {})
+        return mapping["gid"]
+
+    @property
     def base_dn(self) -> str:
         return self.manager.settings.groups_base_dn or self.manager.settings.base_dn
 
+    def _canonicalize(self, entry: dict[str, Any]) -> dict[str, Any]:
+        result = dict(entry)
+        if self.gid_attribute in entry:
+            result["gidNumber"] = entry[self.gid_attribute]
+        return result
+
     def list(self) -> list[dict[str, Any]]:
         filt = "(|(objectClass=groupOfNames)(objectClass=groupOfUniqueNames)(objectClass=posixGroup))"
+        attrs = list(dict.fromkeys(["cn", self.gid_attribute, "member", "uniqueMember", "memberUid", "objectClass"]))
         with self.manager.connection() as conn:
-            conn.search(self.base_dn, filt, SUBTREE, attributes=["cn", "gidNumber", "member", "uniqueMember", "memberUid", "objectClass"])
+            conn.search(self.base_dn, filt, SUBTREE, attributes=attrs)
             _ensure_success(conn, "SEARCH")
-            return [_entry_to_dict(e) for e in conn.entries]
+            return [self._canonicalize(_entry_to_dict(entry)) for entry in conn.entries]
 
     def get(self, name: str) -> dict[str, Any] | None:
         safe = escape_filter_chars(name)
         with self.manager.connection() as conn:
             conn.search(self.base_dn, f"(&(cn={safe})(|(objectClass=groupOfNames)(objectClass=groupOfUniqueNames)(objectClass=posixGroup)))", SUBTREE, attributes=["*", "+"], size_limit=2)
             _ensure_success(conn, "SEARCH")
-            return _entry_to_dict(conn.entries[0]) if conn.entries else None
+            return self._canonicalize(_entry_to_dict(conn.entries[0])) if conn.entries else None
 
     def _next_gid(self, conn: Any) -> int:
-        conn.search(self.base_dn, "(gidNumber=*)", SUBTREE, attributes=["gidNumber"])
+        gid_attr = self.gid_attribute
+        conn.search(self.base_dn, f"({gid_attr}=*)", SUBTREE, attributes=[gid_attr])
+        _ensure_success(conn, "SEARCH")
         values = []
         for entry in conn.entries:
+            raw = entry.entry_attributes_as_dict.get(gid_attr)
+            if isinstance(raw, list):
+                raw = raw[0] if raw else None
             try:
-                values.append(int(entry.gidNumber.value))
-            except (AttributeError, TypeError, ValueError):
-                pass
+                values.append(int(raw))
+            except (TypeError, ValueError):
+                continue
         candidate = max(values, default=self.gid_min - 1) + 1
         if candidate > self.gid_max:
             raise ValueError("Configured GID range is exhausted")
@@ -265,7 +349,7 @@ class LDAPGroupService:
             attrs: dict[str, Any] = {"cn": name}
             members = data.get("members") or []
             if group_type == "posixGroup":
-                attrs["gidNumber"] = str(data.get("gid_number") or self._next_gid(conn))
+                attrs[self.gid_attribute] = str(data.get("gid_number") or self._next_gid(conn))
                 if members:
                     attrs["memberUid"] = members
             elif group_type == "groupOfUniqueNames":
@@ -281,10 +365,10 @@ class LDAPGroupService:
         if not group:
             raise KeyError(name)
         modifications = {}
-        for attr, value in (data.get("attributes") or {}).items():
-            modifications[attr] = [(MODIFY_REPLACE, value if isinstance(value, list) else [value])]
+        for attr_name, value in (data.get("attributes") or {}).items():
+            modifications[attr_name] = [(MODIFY_REPLACE, value if isinstance(value, list) else [value])]
         if data.get("members") is not None:
-            classes = [str(x).lower() for x in group.get("objectClass", [])]
+            classes = [str(value).lower() for value in group.get("objectClass", [])]
             member_attr = "memberUid" if "posixgroup" in classes else "uniqueMember" if "groupofuniquenames" in classes else "member"
             modifications[member_attr] = [(MODIFY_REPLACE, data["members"])]
         with self.manager.connection() as conn:
@@ -310,7 +394,7 @@ class LDAPOUService:
         with self.manager.connection() as conn:
             conn.search(self.manager.settings.base_dn, "(objectClass=organizationalUnit)", SUBTREE, attributes=["ou", "description"])
             _ensure_success(conn, "SEARCH")
-            return [_entry_to_dict(e) for e in conn.entries]
+            return [_entry_to_dict(entry) for entry in conn.entries]
 
     def create(self, name: str, parent_dn: str | None = None) -> dict[str, Any]:
         parent = parent_dn or self.manager.settings.base_dn
@@ -340,10 +424,10 @@ class LDAPSchemaService:
             if not schema:
                 return {"objectClasses": [], "attributeTypes": [], "syntaxes": [], "matchingRules": []}
             return {
-                "objectClasses": [str(v) for v in schema.object_classes.values()],
-                "attributeTypes": [str(v) for v in schema.attribute_types.values()],
-                "syntaxes": [str(v) for v in schema.ldap_syntaxes.values()],
-                "matchingRules": [str(v) for v in schema.matching_rules.values()],
+                "objectClasses": [str(value) for value in schema.object_classes.values()],
+                "attributeTypes": [str(value) for value in schema.attribute_types.values()],
+                "syntaxes": [str(value) for value in schema.ldap_syntaxes.values()],
+                "matchingRules": [str(value) for value in schema.matching_rules.values()],
             }
 
 
