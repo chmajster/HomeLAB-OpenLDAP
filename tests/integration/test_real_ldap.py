@@ -57,9 +57,6 @@ def test_real_openldap_user_group_ou_and_membership_roundtrip():
         assert found_user["dn"] == created_user["dn"]
         memberships = LDAPMembershipService(manager).groups_for_user(created_user["dn"], username)
         assert any(group["dn"] == created_group["dn"] for group in memberships)
-
-        users.disable(username)
-        users.enable(username)
         users.reset_password(username, "Integration-Password-Changed-123!")
     finally:
         try:
