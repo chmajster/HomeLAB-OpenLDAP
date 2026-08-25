@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import re
 import secrets
+import time
+from collections import defaultdict, deque
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -13,6 +15,7 @@ from app.api import router as api_router
 from app.config import get_settings
 from app.database import init_db
 from app.ldap.connection import LDAPOperationError
+from app.tools_api import router as tools_api_router
 from app.web import router as web_router
 
 settings = get_settings()
@@ -26,6 +29,7 @@ app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, max_age=se
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+LOGIN_ATTEMPTS: dict[str, deque[float]] = defaultdict(deque)
 
 
 @app.middleware("http")
@@ -33,6 +37,17 @@ async def request_security_middleware(request: Request, call_next):
     supplied = request.headers.get("X-Request-ID", "")
     request_id = supplied if REQUEST_ID_RE.fullmatch(supplied) else "req_" + secrets.token_hex(12)
     request.state.request_id = request_id
+
+    if request.url.path == "/login" and request.method.upper() == "POST":
+        source = request.client.host if request.client else "unknown"
+        now = time.monotonic()
+        attempts = LOGIN_ATTEMPTS[source]
+        while attempts and now - attempts[0] > 60:
+            attempts.popleft()
+        if len(attempts) >= 5:
+            return JSONResponse(status_code=429, content={"error": "rate_limited", "message": "Too many login attempts. Try again later.", "request_id": request_id}, headers={"Retry-After": "60"})
+        attempts.append(now)
+
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -40,6 +55,8 @@ async def request_security_middleware(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     response.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; script-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    if settings.session_https_only:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 
@@ -47,17 +64,7 @@ async def request_security_middleware(request: Request, call_next):
 async def ldap_error_handler(request: Request, exc: LDAPOperationError):
     result = exc.result or {}
     logger.error("request_id=%s LDAP operation failed: %s result=%r", getattr(request.state, "request_id", "unknown"), exc, result)
-    return JSONResponse(
-        status_code=502,
-        content={
-            "error": "ldap_server_error",
-            "message": str(exc),
-            "ldap_result": result.get("result"),
-            "ldap_description": result.get("description"),
-            "ldap_message": result.get("message"),
-            "request_id": getattr(request.state, "request_id", "unknown"),
-        },
-    )
+    return JSONResponse(status_code=502, content={"error": "ldap_server_error", "message": str(exc), "ldap_result": result.get("result"), "ldap_description": result.get("description"), "ldap_message": result.get("message"), "request_id": getattr(request.state, "request_id", "unknown")})
 
 
 @app.exception_handler(Exception)
@@ -72,4 +79,5 @@ def startup() -> None:
 
 
 app.include_router(api_router)
+app.include_router(tools_api_router)
 app.include_router(web_router)

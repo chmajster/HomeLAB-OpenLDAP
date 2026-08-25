@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -50,6 +51,11 @@ def get_auth_context(
 
     user_id = request.session.get("user_id") if hasattr(request, "session") else None
     if user_id:
+        if request.method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+            supplied = request.headers.get("X-CSRF-Token", "")
+            expected = request.session.get("csrf_token", "")
+            if not expected or not secrets.compare_digest(supplied, expected):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing or invalid X-CSRF-Token")
         user = db.get(PanelUser, user_id)
         if user and user.enabled:
             return AuthContext(username=user.username, permissions=ROLE_PERMISSIONS.get(user.role, set()), role=user.role)

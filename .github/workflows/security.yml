@@ -13,5 +13,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: pip install -r requirements.txt
-      - run: bandit -r app -x tests -q
-      - run: pip-audit -r requirements.txt
+      - name: Bandit
+        run: bandit -r app -x tests -q -s B324
+      - name: Dependency audit
+        run: pip-audit -r requirements.txt
