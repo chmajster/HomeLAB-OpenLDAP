@@ -4,7 +4,7 @@ import base64
 import hashlib
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from ldap3 import BASE, LEVEL, MODIFY_ADD, MODIFY_DELETE, MODIFY_REPLACE, SUBTREE
@@ -52,7 +52,11 @@ def normalize_values(value: Any) -> list[Any]:
 
 
 def safe_entry_attributes(entry: dict[str, Any]) -> dict[str, Any]:
-    return {k: v for k, v in entry.items() if k.lower() not in READ_ONLY_ATTRIBUTES and k != "dn"}
+    return {
+        key: value
+        for key, value in entry.items()
+        if key != "dn" and key.lower() not in READ_ONLY_ATTRIBUTES and key.lower() != "userpassword"
+    }
 
 
 class LDAPEntryService:
@@ -96,10 +100,7 @@ class LDAPEntryService:
         for change in preview["changes"]:
             attr = change["attribute"]
             values = normalize_values(change["new"])
-            if values:
-                modifications[attr] = [(MODIFY_REPLACE, values)]
-            else:
-                modifications[attr] = [(MODIFY_DELETE, [])]
+            modifications[attr] = [(MODIFY_REPLACE, values)] if values else [(MODIFY_DELETE, [])]
         with self.manager.connection() as conn:
             if not conn.modify(dn, modifications):
                 raise LDAPOperationError("LDAP MODIFY failed", result=conn.result)
@@ -146,8 +147,8 @@ class LDAPEntryService:
         attrs = safe_entry_attributes(source)
         classes = attrs.pop("objectClass", attrs.pop("objectclass", ["top"]))
         for key, value in (replacements or {}).items():
-            if key.lower() in READ_ONLY_ATTRIBUTES:
-                raise ValueError(f"Attribute is read-only: {key}")
+            if key.lower() in READ_ONLY_ATTRIBUTES or key.lower() == "userpassword":
+                raise ValueError(f"Attribute cannot be copied/replaced here: {key}")
             attrs[key] = value
         with self.manager.connection() as conn:
             if not conn.add(target_dn, object_class=normalize_values(classes), attributes=attrs):
@@ -203,9 +204,9 @@ class LDAPMembershipService:
         base = self.manager.settings.groups_base_dn or self.manager.settings.base_dn
         safe_dn = escape_filter_chars(user_dn)
         safe_uid = escape_filter_chars(username)
-        filt = f"(|(member={safe_dn})(uniqueMember={safe_dn})(memberUid={safe_uid}))"
+        ldap_filter = f"(|(member={safe_dn})(uniqueMember={safe_dn})(memberUid={safe_uid}))"
         with self.manager.connection() as conn:
-            conn.search(base, filt, SUBTREE, attributes=["cn", "objectClass", "gidNumber"])
+            conn.search(base, ldap_filter, SUBTREE, attributes=["cn", "objectClass", "gidNumber"])
             _ensure_success(conn, "SEARCH")
             return [_entry_to_dict(entry) for entry in conn.entries]
 
@@ -289,9 +290,9 @@ class AttributeMapping:
         if not value:
             return cls()
         data = json.loads(value)
-        allowed = {field for field in cls.__dataclass_fields__}
+        allowed = set(cls.__dataclass_fields__)
         clean = {key: val for key, val in data.items() if key in allowed and isinstance(val, str)}
         return cls(**clean)
 
     def to_json(self) -> str:
-        return json.dumps(self.__dict__, ensure_ascii=False)
+        return json.dumps(asdict(self), ensure_ascii=False)
