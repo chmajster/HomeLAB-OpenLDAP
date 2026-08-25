@@ -13,12 +13,19 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_ldap_manager
 from app.ldap import LDAPConnectionManager, LDAPGroupService, LDAPOUService, LDAPUserService
+from app.models import AppSetting
 from app.schemas import GroupCreate, UserCreate
 from app.web import page_context, require_web_user, verify_csrf
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
 settings = get_settings()
+
+DEFAULT_OBJECTCLASS_TEMPLATES = [
+    {"name": "Basic User", "object_classes": ["top", "person", "organizationalPerson", "inetOrgPerson"], "defaults": {}},
+    {"name": "Linux User", "object_classes": ["top", "person", "organizationalPerson", "inetOrgPerson", "posixAccount", "shadowAccount"], "defaults": {"loginShell": "/bin/bash"}},
+    {"name": "Service Account", "object_classes": ["top", "person", "organizationalPerson", "inetOrgPerson"], "defaults": {"description": "Service account"}},
+]
 
 
 def require_write(request: Request, db: Session):
@@ -36,12 +43,41 @@ def audit_meta(request: Request, user) -> dict[str, str | None]:
     }
 
 
+def objectclass_templates(db: Session) -> list[dict]:
+    row = db.get(AppSetting, "ldap.objectclass_templates")
+    if not row:
+        return DEFAULT_OBJECTCLASS_TEMPLATES
+    try:
+        data = json.loads(row.value)
+    except json.JSONDecodeError:
+        return DEFAULT_OBJECTCLASS_TEMPLATES
+    return data if isinstance(data, list) and data else DEFAULT_OBJECTCLASS_TEMPLATES
+
+
+def selected_template(db: Session, name: str) -> dict:
+    for item in objectclass_templates(db):
+        if item.get("name") == name:
+            return item
+    raise HTTPException(status_code=422, detail="Unknown ObjectClass template")
+
+
 @router.get("/directory/users/create", response_class=HTMLResponse)
 def create_user_page(request: Request, db: Session = Depends(get_db), manager: LDAPConnectionManager = Depends(get_ldap_manager)):
     user = require_write(request, db)
     ous = LDAPOUService(manager).list()
     groups = LDAPGroupService(manager, settings.gid_min, settings.gid_max).list()
-    return templates.TemplateResponse("user_create.html", page_context(request, user, ous=ous, groups=groups, uid_min=settings.uid_min, uid_max=settings.uid_max))
+    return templates.TemplateResponse(
+        "user_create.html",
+        page_context(
+            request,
+            user,
+            ous=ous,
+            groups=groups,
+            objectclass_templates=objectclass_templates(db),
+            uid_min=settings.uid_min,
+            uid_max=settings.uid_max,
+        ),
+    )
 
 
 @router.post("/directory/users/create", response_class=HTMLResponse)
@@ -56,13 +92,20 @@ def create_user_submit(
     password: str = Form(...),
     gid_number: int = Form(...),
     home_directory: str = Form(""),
-    login_shell: str = Form("/bin/bash"),
+    login_shell: str = Form(""),
     organizational_unit: str = Form(""),
+    template_name: str = Form("Linux User"),
     db: Session = Depends(get_db),
     manager: LDAPConnectionManager = Depends(get_ldap_manager),
 ):
     panel_user = require_write(request, db)
     verify_csrf(request, csrf_token)
+    template = selected_template(db, template_name)
+    defaults = dict(template.get("defaults") or {})
+    configured_home = home_directory or str(defaults.pop("homeDirectory", "") or "")
+    if configured_home:
+        configured_home = configured_home.replace("{username}", username)
+    configured_shell = login_shell or str(defaults.pop("loginShell", "") or "/bin/bash")
     payload = UserCreate(
         username=username,
         first_name=first_name,
@@ -71,12 +114,16 @@ def create_user_submit(
         email=email or None,
         password=password,
         gid_number=gid_number,
-        home_directory=home_directory or None,
-        login_shell=login_shell,
+        home_directory=configured_home or None,
+        login_shell=configured_shell,
         organizational_unit=organizational_unit or None,
+        object_classes=list(template.get("object_classes") or []),
+        attributes=defaults,
     )
     result = LDAPUserService(manager, settings.uid_min, settings.uid_max).create(payload.model_dump())
-    AuditService(db).record(**audit_meta(request, panel_user), operation="ADD", status="SUCCESS", dn=result["dn"], new_value={key: value for key, value in payload.model_dump().items() if key != "password"})
+    audit_value = {key: value for key, value in payload.model_dump().items() if key != "password"}
+    audit_value["template"] = template_name
+    AuditService(db).record(**audit_meta(request, panel_user), operation="ADD_SERVICE_ACCOUNT" if template_name == "Service Account" else "ADD", status="SUCCESS", dn=result["dn"], new_value=audit_value)
     return RedirectResponse(f"/users/{username}", status_code=303)
 
 
