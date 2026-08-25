@@ -91,7 +91,7 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y python3 python3-venv python3-pip build-essential libldap2-dev libsasl2-dev ldap-utils ca-certificates curl sudo
+apt-get install -y python3 python3-venv python3-pip build-essential libldap2-dev libsasl2-dev ldap-utils ca-certificates curl sudo git
 if [[ "$CONFIGURE_NGINX" == true ]]; then apt-get install -y nginx; fi
 
 id "$APP_USER" >/dev/null 2>&1 || useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin "$APP_USER"
@@ -99,7 +99,7 @@ install -d -o root -g "$APP_USER" -m 0750 "$APP_DIR" "$ETC_DIR"
 install -d -o "$APP_USER" -g "$APP_USER" -m 0750 "$DATA_DIR" "$LOG_DIR" "$BACKUP_DIR"
 
 log "Installing application files"
-tar --exclude='.git' --exclude='venv' --exclude='.venv' --exclude='.env' -cf - . | tar -C "$APP_DIR" -xf -
+tar --exclude='venv' --exclude='.venv' --exclude='.env' -cf - . | tar -C "$APP_DIR" -xf -
 python3 -m venv "$APP_DIR/venv"
 "$APP_DIR/venv/bin/pip" install --upgrade pip wheel
 "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
@@ -133,15 +133,21 @@ install -o root -g root -m 0440 "$APP_DIR/scripts/homelab-openldap-backup.sudoer
 visudo -cf /etc/sudoers.d/homelab-openldap-backup >/dev/null
 install -o root -g root -m 0644 "$APP_DIR/systemd/homelab-openldap-manager.service" /etc/systemd/system/homelab-openldap-manager.service
 
+COMMON_ENV=(
+  APP_ENV=production
+  DATABASE_URL="sqlite:///${DATA_DIR}/app.db"
+  SECRET_KEY="$SECRET_KEY"
+  ENCRYPTION_KEY="$ENCRYPTION_KEY"
+  PYTHONPATH="$APP_DIR"
+)
+env "${COMMON_ENV[@]}" "$APP_DIR/venv/bin/alembic" -c "$APP_DIR/alembic.ini" upgrade head
+
 if [[ "$NON_INTERACTIVE" == true ]]; then
   set +x
-  env \
-    APP_ENV=production DATABASE_URL="sqlite:///${DATA_DIR}/app.db" SECRET_KEY="$SECRET_KEY" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+  env "${COMMON_ENV[@]}" \
     ADMIN_USER="$ADMIN_USER" ADMIN_PASSWORD="$ADMIN_PASSWORD" LDAP_URL="$LDAP_URL" LDAP_BASE_DN="$LDAP_BASE_DN" LDAP_BIND_DN="$LDAP_BIND_DN" LDAP_BIND_PASSWORD="$LDAP_BIND_PASSWORD" \
     LDAP_STARTTLS="$LDAP_STARTTLS" LDAP_VERIFY_TLS="$LDAP_VERIFY_TLS" USERS_BASE_DN="$USERS_BASE_DN" GROUPS_BASE_DN="$GROUPS_BASE_DN" \
-    PYTHONPATH="$APP_DIR" "$APP_DIR/venv/bin/python" "$APP_DIR/scripts/bootstrap.py"
-else
-  env APP_ENV=production DATABASE_URL="sqlite:///${DATA_DIR}/app.db" SECRET_KEY="$SECRET_KEY" ENCRYPTION_KEY="$ENCRYPTION_KEY" PYTHONPATH="$APP_DIR" "$APP_DIR/venv/bin/python" -c 'from app.database import init_db; init_db()'
+    "$APP_DIR/venv/bin/python" "$APP_DIR/scripts/bootstrap.py"
 fi
 
 systemctl daemon-reload
