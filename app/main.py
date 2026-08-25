@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
+from app.advanced_api import router as advanced_api_router
 from app.api import router as api_router
 from app.config import get_settings
 from app.database import init_db
@@ -81,5 +82,6 @@ def startup() -> None:
 
 app.include_router(api_router)
 app.include_router(tools_api_router)
+app.include_router(advanced_api_router)
 app.include_router(web_router)
 app.include_router(tools_web_router)
