@@ -16,6 +16,7 @@ from app.config import get_settings
 from app.database import init_db
 from app.ldap.connection import LDAPOperationError
 from app.tools_api import router as tools_api_router
+from app.tools_web import router as tools_web_router
 from app.web import router as web_router
 
 settings = get_settings()
@@ -81,3 +82,4 @@ def startup() -> None:
 app.include_router(api_router)
 app.include_router(tools_api_router)
 app.include_router(web_router)
+app.include_router(tools_web_router)
