@@ -91,10 +91,8 @@ class LDAPConnectionManager:
         except Empty:
             return self._create_bound_connection(self.settings.bind_dn, self.settings.bind_password)
         if not conn.bound:
-            try:
-                conn.unbind()
-            finally:
-                return self._create_bound_connection(self.settings.bind_dn, self.settings.bind_password)
+            conn.unbind()
+            return self._create_bound_connection(self.settings.bind_dn, self.settings.bind_password)
         return conn
 
     def _release(self, conn: Connection, reusable: bool) -> None:
