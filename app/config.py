@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     ldap_verify_tls: bool = True
     ldap_ca_cert: str | None = None
     ldap_connect_timeout: int = 10
+    ldap_cache_ttl: int = 300
     users_base_dn: str | None = None
     groups_base_dn: str | None = None
     uid_min: int = 10000
@@ -40,6 +41,13 @@ class Settings(BaseSettings):
     def validate_port(cls, value: int) -> int:
         if not 1 <= value <= 65535:
             raise ValueError("WEB_PORT must be between 1 and 65535")
+        return value
+
+    @field_validator("ldap_cache_ttl")
+    @classmethod
+    def validate_cache_ttl(cls, value: int) -> int:
+        if not 10 <= value <= 86400:
+            raise ValueError("LDAP_CACHE_TTL must be between 10 and 86400 seconds")
         return value
 
     @property
