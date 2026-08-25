@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Logowanie · {{ app_name }}{% endblock %}
+{% block public_content %}
+<div class="auth-card card shadow-sm mx-auto"><div class="card-body p-4">
+<h1 class="h4 mb-4">HomeLAB OpenLDAP Manager</h1>
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+<form method="post" action="/login">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="mb-3"><label class="form-label">Login</label><input class="form-control" name="username" required autofocus></div>
+<div class="mb-3"><label class="form-label">Hasło</label><input class="form-control" type="password" name="password" required></div>
+<button class="btn btn-primary w-100">Zaloguj</button>
+</form></div></div>
+{% endblock %}

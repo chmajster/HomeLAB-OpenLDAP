@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pl" data-bs-theme="{{ user.theme if user and user.theme != 'system' else 'auto' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="/static/app.css" rel="stylesheet">
+</head>
+<body>
+{% if user %}
+<div class="d-flex min-vh-100">
+  <aside class="sidebar border-end p-3">
+    <a class="navbar-brand fw-semibold d-block mb-4" href="/dashboard">HomeLAB OpenLDAP</a>
+    <nav class="nav flex-column gap-1">
+      <a class="nav-link" href="/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a>
+      <div class="small text-secondary mt-3 mb-1">Directory</div>
+      <a class="nav-link" href="/directory"><i class="bi bi-diagram-3"></i> LDAP Browser</a>
+      <a class="nav-link" href="/users"><i class="bi bi-people"></i> Users</a>
+      <a class="nav-link" href="/groups"><i class="bi bi-collection"></i> Groups</a>
+      <a class="nav-link" href="/search"><i class="bi bi-search"></i> Search</a>
+      <div class="small text-secondary mt-3 mb-1">Tools</div>
+      <a class="nav-link" href="/schema"><i class="bi bi-braces"></i> Schema Browser</a>
+      <div class="small text-secondary mt-3 mb-1">Administration</div>
+      <a class="nav-link" href="/audit"><i class="bi bi-journal-text"></i> Audit</a>
+    </nav>
+  </aside>
+  <main class="flex-grow-1">
+    <header class="border-bottom px-4 py-3 d-flex justify-content-between align-items-center">
+      <span class="text-secondary">{{ user.username }} · {{ user.role }}</span>
+      <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-secondary">Wyloguj</button></form>
+    </header>
+    <div class="container-fluid p-4">{% block content %}{% endblock %}</div>
+  </main>
+</div>
+{% else %}
+<main class="container py-5">{% block public_content %}{% endblock %}</main>
+{% endif %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

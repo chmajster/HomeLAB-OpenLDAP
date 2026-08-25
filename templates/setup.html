@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Pierwsza konfiguracja · {{ app_name }}{% endblock %}
+{% block public_content %}
+<div class="setup-card card shadow-sm mx-auto"><div class="card-body p-4 p-lg-5">
+<h1 class="h3">Pierwsza konfiguracja</h1><p class="text-secondary">LDAP → test połączenia → administrator panelu → zapis konfiguracji.</p>
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+{% if test_steps %}<div class="mb-4">{% for s in test_steps %}<div class="small"><span class="badge {{ 'text-bg-success' if s.ok else 'text-bg-danger' }}">{{ 'OK' if s.ok else 'FAIL' }}</span> {{ s.name }} — {{ s.detail }}</div>{% endfor %}</div>{% endif %}
+<form method="post" action="/setup">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<h2 class="h5 mt-4">Połączenie LDAP</h2>
+<div class="row g-3"><div class="col-md-6"><label class="form-label">LDAP URL</label><input class="form-control" name="ldap_url" placeholder="ldap://10.0.0.20:389" required></div><div class="col-md-6"><label class="form-label">Base DN</label><input class="form-control" name="base_dn" placeholder="dc=example,dc=local" required></div><div class="col-md-6"><label class="form-label">Bind DN</label><input class="form-control" name="bind_dn" required></div><div class="col-md-6"><label class="form-label">Bind Password</label><input class="form-control" type="password" name="bind_password" required autocomplete="new-password"></div><div class="col-md-6"><label class="form-label">Users Base DN (opcjonalnie)</label><input class="form-control" name="users_base_dn"></div><div class="col-md-6"><label class="form-label">Groups Base DN (opcjonalnie)</label><input class="form-control" name="groups_base_dn"></div></div>
+<div class="form-check mt-3"><input class="form-check-input" type="checkbox" name="starttls" value="true" id="starttls"><label class="form-check-label" for="starttls">StartTLS</label></div>
+<div class="form-check"><input class="form-check-input" type="checkbox" name="verify_tls" value="true" id="verify" checked><label class="form-check-label" for="verify">Verify TLS certificate</label></div>
+<h2 class="h5 mt-4">Administrator panelu</h2><div class="row g-3"><div class="col-md-6"><label class="form-label">Login</label><input class="form-control" name="admin_user" value="admin" required></div><div class="col-md-6"><label class="form-label">Hasło</label><input class="form-control" type="password" name="admin_password" minlength="12" required autocomplete="new-password"></div></div>
+<button class="btn btn-primary mt-4">Testuj i zapisz konfigurację</button>
+</form></div></div>
+{% endblock %}
