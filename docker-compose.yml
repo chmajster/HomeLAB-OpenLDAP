@@ -1,0 +1,31 @@
+services:
+  openldap:
+    image: osixia/openldap:1.5.0
+    environment:
+      LDAP_ORGANISATION: HomeLAB
+      LDAP_DOMAIN: example.local
+      LDAP_ADMIN_PASSWORD: admin-dev-password
+    ports:
+      - "1389:389"
+    healthcheck:
+      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost:389", "-b", "dc=example,dc=local", "-D", "cn=admin,dc=example,dc=local", "-w", "admin-dev-password"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  app:
+    build: .
+    depends_on:
+      openldap:
+        condition: service_healthy
+    environment:
+      APP_ENV: development
+      DATABASE_URL: sqlite:////app/data/app.db
+      SECRET_KEY: development-only-change-me
+      SESSION_HTTPS_ONLY: "false"
+      ENABLE_DOCS: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - app-data:/app/data
+volumes:
+  app-data:
