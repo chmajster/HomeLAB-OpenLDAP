@@ -29,6 +29,7 @@ class LDAPSettings:
     connect_timeout: int = 10
     users_base_dn: str | None = None
     groups_base_dn: str | None = None
+    attribute_mapping: dict[str, str] | None = None
 
 
 class LDAPConnectionManager:
@@ -72,7 +73,8 @@ class LDAPConnectionManager:
             receive_timeout=self.settings.connect_timeout,
             raise_exceptions=False,
         )
-        if not conn.open():
+        conn.open()
+        if conn.closed:
             raise LDAPSocketOpenError(str(conn.last_error or "Unable to open LDAP socket"))
         if self.settings.starttls and not conn.server.ssl:
             if not conn.start_tls():
