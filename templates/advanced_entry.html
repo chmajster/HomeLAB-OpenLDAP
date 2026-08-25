@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/directory">Directory</a></li><li class="breadcrumb-item active">Advanced LDAP Editor</li></ol></nav>
+<h1 class="h3">Advanced LDAP Editor</h1>
+<div class="text-secondary text-break mb-4">{{ entry.dn }}</div>
+<div class="alert alert-warning">This editor modifies the real LDAP entry. Operational attributes and <code>userPassword</code> are excluded from the JSON editor. Password changes use the dedicated password operation.</div>
+<ul class="nav nav-tabs" role="tablist">
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#attributes">Attributes</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#raw">Raw LDAP</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#children">Children</button></li>
+</ul>
+<div class="tab-content border border-top-0 p-4">
+  <div class="tab-pane fade show active" id="attributes">
+    {% if user.role != 'Read Only' %}
+    <form method="post" action="/directory/entry/{{ encoded_dn }}/modify">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="form-label">Attributes JSON</label>
+      <textarea class="form-control font-monospace" rows="24" name="attributes_json" spellcheck="false">{{ editable_json }}</textarea>
+      <label class="form-label mt-3">Confirmation</label>
+      <input class="form-control" name="confirmation" placeholder="Type MODIFY" required>
+      <button class="btn btn-danger mt-3">Validate, diff and modify LDAP</button>
+    </form>
+    {% else %}
+    <pre>{{ editable_json }}</pre>
+    {% endif %}
+  </div>
+  <div class="tab-pane fade" id="raw"><pre>{{ entry }}</pre></div>
+  <div class="tab-pane fade" id="children"><div class="list-group">{% for child in children %}<a class="list-group-item list-group-item-action" href="/directory/entry/{{ encode_dn(child.dn) }}">{{ child.dn }}</a>{% else %}<div class="list-group-item text-secondary">No child entries.</div>{% endfor %}</div></div>
+</div>
+{% endblock %}
