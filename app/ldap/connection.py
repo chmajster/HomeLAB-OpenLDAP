@@ -4,6 +4,7 @@ import ssl
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
+from queue import Empty, Full, LifoQueue
 from urllib.parse import urlparse
 
 from ldap3 import ALL, Connection, Server, Tls
@@ -31,12 +32,15 @@ class LDAPSettings:
 
 
 class LDAPConnectionManager:
-    """Creates one LDAP connection per logical operation and reuses it inside that operation."""
+    """Bounded pool of service-account LDAP connections with exclusive checkout per operation."""
 
-    def __init__(self, settings: LDAPSettings):
+    def __init__(self, settings: LDAPSettings, pool_size: int = 5):
         self.settings = settings
+        self.pool_size = min(max(pool_size, 1), 32)
+        self._server_instance = self._build_server()
+        self._pool: LifoQueue[Connection] = LifoQueue(maxsize=self.pool_size)
 
-    def _server(self) -> Server:
+    def _build_server(self) -> Server:
         parsed = urlparse(self.settings.url)
         if parsed.scheme not in {"ldap", "ldaps"}:
             raise ValueError("LDAP URL must use ldap:// or ldaps://")
@@ -56,33 +60,90 @@ class LDAPConnectionManager:
             connect_timeout=self.settings.connect_timeout,
         )
 
+    def _server(self) -> Server:
+        return self._server_instance
+
+    def _create_bound_connection(self, user: str, password: str) -> Connection:
+        conn = Connection(
+            self._server(),
+            user=user,
+            password=password,
+            auto_bind=False,
+            receive_timeout=self.settings.connect_timeout,
+            raise_exceptions=False,
+        )
+        if not conn.open():
+            raise LDAPSocketOpenError(str(conn.last_error or "Unable to open LDAP socket"))
+        if self.settings.starttls and not conn.server.ssl:
+            if not conn.start_tls():
+                result = dict(conn.result)
+                conn.unbind()
+                raise LDAPOperationError("StartTLS failed", result=result)
+        if not conn.bind():
+            result = dict(conn.result)
+            conn.unbind()
+            raise LDAPOperationError("LDAP bind failed", result=result)
+        return conn
+
+    def _acquire(self) -> Connection:
+        try:
+            conn = self._pool.get_nowait()
+        except Empty:
+            return self._create_bound_connection(self.settings.bind_dn, self.settings.bind_password)
+        if not conn.bound:
+            try:
+                conn.unbind()
+            finally:
+                return self._create_bound_connection(self.settings.bind_dn, self.settings.bind_password)
+        return conn
+
+    def _release(self, conn: Connection, reusable: bool) -> None:
+        if not reusable or not conn.bound:
+            conn.unbind()
+            return
+        try:
+            self._pool.put_nowait(conn)
+        except Full:
+            conn.unbind()
+
     @contextmanager
     def connection(self):
         conn: Connection | None = None
+        reusable = True
         try:
-            conn = Connection(
-                self._server(),
-                user=self.settings.bind_dn,
-                password=self.settings.bind_password,
-                auto_bind=False,
-                receive_timeout=self.settings.connect_timeout,
-                raise_exceptions=False,
-            )
-            if not conn.open():
-                raise LDAPSocketOpenError(str(conn.last_error or "Unable to open LDAP socket"))
-            if self.settings.starttls and not conn.server.ssl:
-                if not conn.start_tls():
-                    raise LDAPOperationError("StartTLS failed", result=conn.result)
-            if not conn.bind():
-                raise LDAPOperationError("LDAP bind failed", result=conn.result)
+            conn = self._acquire()
             yield conn
         except LDAPOperationError:
+            reusable = False
             raise
-        except LDAPException as exc:
+        except (LDAPException, OSError) as exc:
+            reusable = False
             raise LDAPOperationError(str(exc)) from exc
+        finally:
+            if conn is not None:
+                self._release(conn, reusable)
+
+    def authenticate(self, user_dn: str, password: str) -> bool:
+        """Verify end-user credentials without adding that connection to the service-account pool."""
+        if not user_dn or not password:
+            return False
+        conn: Connection | None = None
+        try:
+            conn = self._create_bound_connection(user_dn, password)
+            return bool(conn.bound)
+        except (LDAPException, LDAPOperationError, OSError):
+            return False
         finally:
             if conn is not None and conn.bound:
                 conn.unbind()
+
+    def close(self) -> None:
+        while True:
+            try:
+                conn = self._pool.get_nowait()
+            except Empty:
+                break
+            conn.unbind()
 
     def test(self) -> list[dict]:
         steps: list[dict] = []
@@ -98,12 +159,10 @@ class LDAPConnectionManager:
                 schema_ok = bool(conn.server.schema and conn.server.schema.object_classes)
                 steps.append({"name": "schema", "ok": schema_ok, "detail": "Schema available" if schema_ok else "Schema unavailable"})
                 writable = self._check_write_capability(conn)
-                steps.append({"name": "write_permissions", "ok": writable, "detail": "Write capability detected from root DSE/ACL outcome" if writable else "Write permission not proven; no destructive probe was executed"})
+                steps.append({"name": "write_permissions", "ok": writable, "detail": "Write capability detected from authenticated bind" if writable else "Write permission not proven; no destructive probe was executed"})
         except Exception as exc:
             steps.append({"name": "connection", "ok": False, "detail": str(exc)})
         return steps
 
     def _check_write_capability(self, conn: Connection) -> bool:
-        # Do not mutate LDAP during a connection test. A successful authenticated bind plus
-        # readable naming context is considered inconclusive rather than performing a probe write.
         return bool(conn.bound and conn.user)
