@@ -18,6 +18,7 @@ from app.ldap import LDAPConnectionManager, LDAPGroupService, LDAPHealthService,
 from app.ldap.connection import LDAPSettings
 from app.models import AuditLog, LDAPServer, PanelUser
 from app.security import encrypt_secret, generate_csrf_token, hash_password, verify_password
+from app.session_store import active_session, establish_session, revoke_current_session
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -39,10 +40,10 @@ def verify_csrf(request: Request, supplied: str) -> None:
 
 
 def current_user(request: Request, db: Session) -> PanelUser | None:
-    user_id = request.session.get("user_id")
-    if not user_id:
+    session_row = active_session(request, db)
+    if not session_row:
         return None
-    user = db.get(PanelUser, user_id)
+    user = db.get(PanelUser, session_row.user_id)
     return user if user and user.enabled else None
 
 
@@ -100,11 +101,11 @@ def setup_submit(
     if not connection_ok:
         return templates.TemplateResponse("setup.html", page_context(request, error="Test LDAP nie powiódł się.", test_steps=test), status_code=422)
     server = LDAPServer(name="Default", url=ldap_url, base_dn=base_dn, bind_dn=bind_dn, encrypted_bind_password=encrypt_secret(bind_password), users_base_dn=users_base_dn or None, groups_base_dn=groups_base_dn or None, starttls=starttls, verify_tls=verify_tls)
-    admin = PanelUser(username=admin_user, password_hash=hash_password(admin_password), role="Administrator")
+    admin = PanelUser(username=admin_user, password_hash=hash_password(admin_password), role="Administrator", auth_source="local")
     db.add_all([server, admin])
     db.commit()
     db.refresh(admin)
-    request.session["user_id"] = admin.id
+    establish_session(request, db, admin, settings.session_max_age)
     return RedirectResponse("/dashboard", status_code=303)
 
 
@@ -119,19 +120,18 @@ def login_page(request: Request, db: Session = Depends(get_db)):
 def login_submit(request: Request, username: str = Form(...), password: str = Form(...), csrf_token: str = Form(...), db: Session = Depends(get_db)):
     verify_csrf(request, csrf_token)
     user = db.scalar(select(PanelUser).where(PanelUser.username == username))
-    if not user or not user.enabled or not verify_password(password, user.password_hash):
+    if not user or user.auth_source != "local" or not user.enabled or not verify_password(password, user.password_hash):
         return templates.TemplateResponse("login.html", page_context(request, error="Nieprawidłowy login lub hasło."), status_code=401)
-    request.session.clear()
-    request.session["user_id"] = user.id
-    request.session["csrf_token"] = generate_csrf_token()
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
+    establish_session(request, db, user, settings.session_max_age)
     return RedirectResponse("/dashboard", status_code=303)
 
 
 @router.post("/logout")
-def logout(request: Request, csrf_token: str = Form(...)):
+def logout(request: Request, csrf_token: str = Form(...), db: Session = Depends(get_db)):
     verify_csrf(request, csrf_token)
+    revoke_current_session(request, db)
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
 
