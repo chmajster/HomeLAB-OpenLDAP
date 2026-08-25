@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}ACL Manager · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="mb-4"><h1 class="h3 mb-1">ACL Manager</h1><div class="text-secondary">Manage ordered <code>olcAccess</code> rules in <code>cn=config</code>. The LDAP bind account must have access to the configuration database.</div></div>
+<div class="alert alert-warning"><strong>High-impact configuration.</strong> A malformed ACL can lock administrators out of the directory. Keep an out-of-band recovery path and verify each rule before applying.</div>
+{% for row in rows %}
+<div class="card mb-4">
+  <div class="card-header"><strong>{{ row.olcDatabase }}</strong> <span class="text-secondary">{{ row.olcSuffix or '' }}</span></div>
+  <div class="card-body">
+    <div class="small text-secondary mb-1">Database DN</div><code>{{ row.dn }}</code>
+    <div class="small text-secondary mt-3 mb-1">Current ACL</div>
+    <pre class="border rounded p-3 bg-body-tertiary">{% for rule in row.olcAccess or [] %}{{ rule }}
+{% endfor %}</pre>
+    <form method="post" action="/acl-manager">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="database_dn" value="{{ row.dn }}">
+      <label class="form-label">Replacement ACL rules · one rule per line</label>
+      <textarea class="form-control font-monospace" rows="8" name="rules" required>{% for rule in row.olcAccess or [] %}{{ rule }}
+{% endfor %}</textarea>
+      <div class="row g-2 mt-1"><div class="col-md-8"><input class="form-control" name="confirmation" placeholder="APPLY" required></div><div class="col-md-4"><button class="btn btn-danger w-100">Replace ACL</button></div></div>
+    </form>
+  </div>
+</div>
+{% else %}<div class="alert alert-secondary">No <code>olcDatabaseConfig</code> entries were returned.</div>{% endfor %}
+{% endblock %}

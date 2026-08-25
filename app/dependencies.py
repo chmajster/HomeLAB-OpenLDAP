@@ -24,8 +24,36 @@ bearer = HTTPBearer(auto_error=False)
 
 ROLE_PERMISSIONS = {
     "Administrator": {"*"},
-    "Operator": {"ldap.read", "ldap.users.read", "ldap.users.write", "ldap.groups.read", "ldap.groups.write", "ldap.ou.read", "ldap.ou.write", "ldap.schema.read", "audit.read"},
-    "Read Only": {"ldap.read", "ldap.users.read", "ldap.groups.read", "ldap.ou.read", "ldap.schema.read", "audit.read"},
+    "Operator": {
+        "ldap.read",
+        "ldap.users.read",
+        "ldap.users.write",
+        "ldap.groups.read",
+        "ldap.groups.write",
+        "ldap.ou.read",
+        "ldap.ou.write",
+        "ldap.schema.read",
+        "ldap.sudo.read",
+        "ldap.sudo.write",
+        "ldap.ssh.read",
+        "ldap.ssh.write",
+        "ldap.lifecycle.read",
+        "ldap.lifecycle.write",
+        "ldap.ppolicy.read",
+        "audit.read",
+    },
+    "Read Only": {
+        "ldap.read",
+        "ldap.users.read",
+        "ldap.groups.read",
+        "ldap.ou.read",
+        "ldap.schema.read",
+        "ldap.sudo.read",
+        "ldap.ssh.read",
+        "ldap.lifecycle.read",
+        "ldap.ppolicy.read",
+        "audit.read",
+    },
 }
 
 DEFAULT_ATTRIBUTE_MAPPING = {
