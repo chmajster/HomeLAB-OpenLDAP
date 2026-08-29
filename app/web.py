@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import secrets
 from datetime import datetime, timezone
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -11,6 +10,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.audit import AuditService
+from app.browser import LDAPBrowserService
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_ldap_manager
@@ -182,12 +182,16 @@ def group_details(name: str, request: Request, db: Session = Depends(get_db), ma
 
 
 @router.get("/directory", response_class=HTMLResponse)
-def directory(request: Request, dn: str | None = None, db: Session = Depends(get_db), manager: LDAPConnectionManager = Depends(get_ldap_manager)):
+def directory(
+    request: Request,
+    dn: str | None = None,
+    q: str = "",
+    db: Session = Depends(get_db),
+    manager: LDAPConnectionManager = Depends(get_ldap_manager),
+):
     user = require_web_user(request, db)
-    base = dn or manager.settings.base_dn
-    children = LDAPSearchService(manager).search(base_dn=base, ldap_filter="(objectClass=*)", scope="LEVEL", attributes=["objectClass", "ou", "uid", "cn"], size_limit=500)
-    entry = LDAPSearchService(manager).search(base_dn=base, ldap_filter="(objectClass=*)", scope="BASE", attributes=["*", "+"], size_limit=1)
-    return templates.TemplateResponse("directory.html", page_context(request, user, dn=base, entry=entry[0] if entry else None, children=children, quote=quote))
+    node = LDAPBrowserService(manager).node(dn, q=q)
+    return templates.TemplateResponse("directory.html", page_context(request, user, node=node))
 
 
 @router.get("/search", response_class=HTMLResponse)
