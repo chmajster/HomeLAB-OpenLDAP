@@ -1,8 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/directory">Directory</a></li><li class="breadcrumb-item active">Advanced LDAP Editor</li></ol></nav>
-<h1 class="h3">Advanced LDAP Editor</h1>
-<div class="text-secondary text-break mb-4">{{ entry.dn }}</div>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3"><div><h1 class="h3">Advanced LDAP Editor</h1><div class="text-secondary text-break mb-4">{{ entry.dn }}</div></div><a class="btn btn-outline-secondary" href="/history?dn={{ entry.dn|urlencode }}"><i class="bi bi-clock-history"></i> History</a></div>
 <div class="alert alert-warning">This editor modifies the real LDAP entry. Operational attributes and <code>userPassword</code> are excluded from the JSON editor. Password changes use the dedicated password operation.</div>
 <ul class="nav nav-tabs" role="tablist">
   <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#attributes">Attributes</button></li>
