@@ -17,44 +17,12 @@ from app.config import get_settings
 from app.database import get_db
 from app.ldap.connection import LDAPConnectionManager, LDAPSettings
 from app.models import APIToken, AppSetting, LDAPServer, PanelUser
+from app.rbac import DEFAULT_ROLE_PERMISSIONS, allows as rbac_allows, role_permissions
 from app.security import decrypt_secret, hash_api_token
 from app.session_store import active_session
 
 bearer = HTTPBearer(auto_error=False)
-
-ROLE_PERMISSIONS = {
-    "Administrator": {"*"},
-    "Operator": {
-        "ldap.read",
-        "ldap.users.read",
-        "ldap.users.write",
-        "ldap.groups.read",
-        "ldap.groups.write",
-        "ldap.ou.read",
-        "ldap.ou.write",
-        "ldap.schema.read",
-        "ldap.sudo.read",
-        "ldap.sudo.write",
-        "ldap.ssh.read",
-        "ldap.ssh.write",
-        "ldap.lifecycle.read",
-        "ldap.lifecycle.write",
-        "ldap.ppolicy.read",
-        "audit.read",
-    },
-    "Read Only": {
-        "ldap.read",
-        "ldap.users.read",
-        "ldap.groups.read",
-        "ldap.ou.read",
-        "ldap.schema.read",
-        "ldap.sudo.read",
-        "ldap.ssh.read",
-        "ldap.lifecycle.read",
-        "ldap.ppolicy.read",
-        "audit.read",
-    },
-}
+ROLE_PERMISSIONS = DEFAULT_ROLE_PERMISSIONS
 
 DEFAULT_ATTRIBUTE_MAPPING = {
     "username": "uid",
@@ -76,7 +44,7 @@ class AuthContext:
     role: str = "token"
 
     def allows(self, permission: str) -> bool:
-        return "*" in self.permissions or permission in self.permissions or (permission.startswith("ldap.") and "ldap.read" in self.permissions and permission.endswith(".read"))
+        return rbac_allows(self.permissions, permission)
 
 
 def _aware(value: datetime) -> datetime:
@@ -107,7 +75,7 @@ def get_auth_context(
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing or invalid X-CSRF-Token")
         user = db.get(PanelUser, session_row.user_id)
         if user and user.enabled:
-            return AuthContext(username=user.username, permissions=ROLE_PERMISSIONS.get(user.role, set()), role=user.role)
+            return AuthContext(username=user.username, permissions=role_permissions(db, user.role), role=user.role)
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
 
 

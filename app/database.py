@@ -26,5 +26,8 @@ def get_db() -> Generator[Session, None, None]:
 
 def init_db() -> None:
     from app import models  # noqa: F401
+    from app.rbac import ensure_default_roles
 
     Base.metadata.create_all(bind=engine)
+    with SessionLocal() as db:
+        ensure_default_roles(db)

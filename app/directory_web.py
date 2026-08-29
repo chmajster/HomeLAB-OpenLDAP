@@ -14,6 +14,7 @@ from app.database import get_db
 from app.dependencies import get_ldap_manager
 from app.ldap import LDAPConnectionManager, LDAPGroupService, LDAPOUService, LDAPUserService
 from app.models import AppSetting
+from app.rbac import user_allows
 from app.schemas import GroupCreate, UserCreate
 from app.web import page_context, require_web_user, verify_csrf
 
@@ -28,10 +29,10 @@ DEFAULT_OBJECTCLASS_TEMPLATES = [
 ]
 
 
-def require_write(request: Request, db: Session):
+def require_write(request: Request, db: Session, permission: str):
     user = require_web_user(request, db)
-    if user.role == "Read Only":
-        raise HTTPException(status_code=403, detail="Read Only role cannot modify LDAP")
+    if not user_allows(db, user, permission):
+        raise HTTPException(status_code=403, detail=f"Missing permission: {permission}")
     return user
 
 
@@ -63,7 +64,7 @@ def selected_template(db: Session, name: str) -> dict:
 
 @router.get("/directory/users/create", response_class=HTMLResponse)
 def create_user_page(request: Request, db: Session = Depends(get_db), manager: LDAPConnectionManager = Depends(get_ldap_manager)):
-    user = require_write(request, db)
+    user = require_write(request, db, "ldap.users.write")
     ous = LDAPOUService(manager).list()
     groups = LDAPGroupService(manager, settings.gid_min, settings.gid_max).list()
     return templates.TemplateResponse(
@@ -98,7 +99,7 @@ def create_user_submit(
     db: Session = Depends(get_db),
     manager: LDAPConnectionManager = Depends(get_ldap_manager),
 ):
-    panel_user = require_write(request, db)
+    panel_user = require_write(request, db, "ldap.users.write")
     verify_csrf(request, csrf_token)
     template = selected_template(db, template_name)
     defaults = dict(template.get("defaults") or {})
@@ -138,7 +139,7 @@ def user_action(
     db: Session = Depends(get_db),
     manager: LDAPConnectionManager = Depends(get_ldap_manager),
 ):
-    panel_user = require_write(request, db)
+    panel_user = require_write(request, db, "ldap.users.write")
     verify_csrf(request, csrf_token)
     service = LDAPUserService(manager, settings.uid_min, settings.uid_max)
     entry = service.get(username)
@@ -168,7 +169,7 @@ def user_action(
 
 @router.get("/directory/groups/create", response_class=HTMLResponse)
 def create_group_page(request: Request, db: Session = Depends(get_db)):
-    user = require_write(request, db)
+    user = require_write(request, db, "ldap.groups.write")
     return templates.TemplateResponse("group_create.html", page_context(request, user))
 
 
@@ -182,7 +183,7 @@ def create_group_submit(
     db: Session = Depends(get_db),
     manager: LDAPConnectionManager = Depends(get_ldap_manager),
 ):
-    user = require_write(request, db)
+    user = require_write(request, db, "ldap.groups.write")
     verify_csrf(request, csrf_token)
     payload = GroupCreate(name=name, group_type=group_type, gid_number=gid_number)
     result = LDAPGroupService(manager, settings.gid_min, settings.gid_max).create(payload.model_dump())
@@ -192,7 +193,7 @@ def create_group_submit(
 
 @router.post("/groups/{name}/delete")
 def delete_group_submit(name: str, request: Request, csrf_token: str = Form(...), confirmation: str = Form(...), db: Session = Depends(get_db), manager: LDAPConnectionManager = Depends(get_ldap_manager)):
-    user = require_write(request, db)
+    user = require_write(request, db, "ldap.groups.write")
     verify_csrf(request, csrf_token)
     if confirmation != f"DELETE {name}":
         raise HTTPException(status_code=409, detail=f"Confirmation must equal DELETE {name}")
@@ -210,7 +211,7 @@ def ous_page(request: Request, db: Session = Depends(get_db), manager: LDAPConne
 
 @router.post("/ous/create")
 def create_ou_submit(request: Request, csrf_token: str = Form(...), name: str = Form(...), parent_dn: str = Form(""), db: Session = Depends(get_db), manager: LDAPConnectionManager = Depends(get_ldap_manager)):
-    user = require_write(request, db)
+    user = require_write(request, db, "ldap.ou.write")
     verify_csrf(request, csrf_token)
     result = LDAPOUService(manager).create(name, parent_dn or None)
     AuditService(db).record(**audit_meta(request, user), operation="ADD_OU", status="SUCCESS", dn=result["dn"])
@@ -219,7 +220,7 @@ def create_ou_submit(request: Request, csrf_token: str = Form(...), name: str = 
 
 @router.post("/ous/delete")
 def delete_ou_submit(request: Request, csrf_token: str = Form(...), dn: str = Form(...), confirmation: str = Form(...), db: Session = Depends(get_db), manager: LDAPConnectionManager = Depends(get_ldap_manager)):
-    user = require_write(request, db)
+    user = require_write(request, db, "ldap.ou.write")
     verify_csrf(request, csrf_token)
     if confirmation != f"DELETE {dn}":
         raise HTTPException(status_code=409, detail=f"Confirmation must equal DELETE {dn}")
@@ -230,7 +231,7 @@ def delete_ou_submit(request: Request, csrf_token: str = Form(...), dn: str = Fo
 
 @router.post("/ous/move")
 def move_ou_submit(request: Request, csrf_token: str = Form(...), dn: str = Form(...), new_parent_dn: str = Form(...), new_name: str = Form(""), confirmation: str = Form(...), db: Session = Depends(get_db), manager: LDAPConnectionManager = Depends(get_ldap_manager)):
-    user = require_write(request, db)
+    user = require_write(request, db, "ldap.ou.write")
     verify_csrf(request, csrf_token)
     if confirmation != "MOVE":
         raise HTTPException(status_code=409, detail="Confirmation must equal MOVE")
@@ -257,7 +258,7 @@ def advanced_entry_page(encoded_dn: str, request: Request, db: Session = Depends
 
 @router.post("/directory/entry/{encoded_dn}/modify")
 def advanced_entry_modify(encoded_dn: str, request: Request, csrf_token: str = Form(...), attributes_json: str = Form(...), confirmation: str = Form(...), db: Session = Depends(get_db), manager: LDAPConnectionManager = Depends(get_ldap_manager)):
-    user = require_write(request, db)
+    user = require_write(request, db, "ldap.users.write")
     verify_csrf(request, csrf_token)
     if confirmation != "MODIFY":
         raise HTTPException(status_code=409, detail="Confirmation must equal MODIFY")

@@ -18,7 +18,7 @@ class PanelUser(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(512))
-    role: Mapped[str] = mapped_column(String(32), default="Read Only")
+    role: Mapped[str] = mapped_column(String(128), default="Read Only")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     theme: Mapped[str] = mapped_column(String(16), default="system")
     auth_source: Mapped[str] = mapped_column(String(16), default="local")
@@ -38,6 +38,17 @@ class PanelSession(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
+
+class AccessRole(Base):
+    __tablename__ = "access_roles"
+
+    name: Mapped[str] = mapped_column(String(128), primary_key=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    permissions: Mapped[str] = mapped_column(Text, default="")
+    built_in: Mapped[bool] = mapped_column(Boolean, default=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class LDAPServer(Base):
