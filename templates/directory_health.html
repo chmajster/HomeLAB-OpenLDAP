@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Directory Health · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4"><div><h1 class="h3 mb-1">Directory Health Analyzer</h1><div class="text-secondary">Read-only structural checks for the selected LDAP directory.</div></div><a class="btn btn-outline-primary" href="/directory-health">Run scan again</a></div>
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card h-100"><div class="card-body"><div class="text-secondary small">Health score</div><div class="display-5 fw-semibold">{{ report.score }}</div><span class="badge {% if report.status == 'healthy' %}text-bg-success{% elif report.status == 'warning' %}text-bg-warning{% else %}text-bg-danger{% endif %}">{{ report.status }}</span></div></div></div>
+  {% for key, label in [('users','Users'),('groups','Groups'),('issues','Issues')] %}<div class="col-md-3"><div class="card h-100"><div class="card-body"><div class="text-secondary small">{{ label }}</div><div class="display-6 fw-semibold">{{ report.summary[key] }}</div></div></div></div>{% endfor %}
+</div>
+<div class="card mb-4"><div class="card-header">Connectivity checks</div><div class="card-body">{% for check in report.checks %}<div class="d-flex gap-2 py-2 border-bottom"><span class="badge {{ 'text-bg-success' if check.ok else 'text-bg-danger' }}">{{ 'OK' if check.ok else 'FAIL' }}</span><strong>{{ check.name }}</strong><span class="text-secondary">{{ check.detail or '' }}</span></div>{% endfor %}</div></div>
+<div class="card"><div class="card-header d-flex justify-content-between"><span>Findings</span><span class="text-secondary">critical {{ report.summary.critical }} · high {{ report.summary.high }} · medium {{ report.summary.medium }} · low {{ report.summary.low }}</span></div><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Severity</th><th>Issue</th><th>DN</th><th>Details</th></tr></thead><tbody>
+{% for issue in report.issues %}<tr><td><span class="badge {% if issue.severity == 'critical' %}text-bg-danger{% elif issue.severity == 'high' %}text-bg-warning{% elif issue.severity == 'medium' %}text-bg-info{% else %}text-bg-secondary{% endif %}">{{ issue.severity }}</span></td><td><strong>{{ issue.code }}</strong><div class="small">{{ issue.message }}</div></td><td><code class="small">{{ issue.dn or '—' }}</code></td><td><code class="small">{{ issue.details }}</code></td></tr>{% else %}<tr><td colspan="4" class="text-success py-4">No structural issues detected.</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}
