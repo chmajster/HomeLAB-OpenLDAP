@@ -18,6 +18,8 @@ from app.capability_web import router as capability_web_router
 from app.completion_web import router as completion_web_router
 from app.config import get_settings
 from app.database import init_db
+from app.directory_health_api import router as directory_health_api_router
+from app.directory_health_web import router as directory_health_web_router
 from app.directory_web import router as directory_web_router
 from app.ldap.connection import LDAPOperationError
 from app.lifecycle_api import router as lifecycle_api_router
@@ -104,6 +106,7 @@ app.include_router(replication_api_router)
 app.include_router(capability_api_router)
 app.include_router(rbac_api_router)
 app.include_router(lifecycle_api_router)
+app.include_router(directory_health_api_router)
 app.include_router(web_router)
 app.include_router(directory_web_router)
 app.include_router(tools_web_router)
@@ -113,3 +116,4 @@ app.include_router(server_web_router)
 app.include_router(capability_web_router)
 app.include_router(rbac_web_router)
 app.include_router(lifecycle_web_router)
+app.include_router(directory_health_web_router)
