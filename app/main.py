@@ -20,6 +20,8 @@ from app.directory_web import router as directory_web_router
 from app.ldap.connection import LDAPOperationError
 from app.security_api import router as security_api_router
 from app.security_web import router as security_web_router
+from app.server_api import router as server_api_router
+from app.server_web import router as server_web_router
 from app.tools_api import router as tools_api_router
 from app.tools_web import router as tools_web_router
 from app.web import router as web_router
@@ -88,8 +90,10 @@ app.include_router(api_router)
 app.include_router(tools_api_router)
 app.include_router(advanced_api_router)
 app.include_router(security_api_router)
+app.include_router(server_api_router)
 app.include_router(web_router)
 app.include_router(directory_web_router)
 app.include_router(tools_web_router)
 app.include_router(completion_web_router)
 app.include_router(security_web_router)
+app.include_router(server_web_router)

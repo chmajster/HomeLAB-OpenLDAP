@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}LDAP Servers · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+  <div>
+    <h1 class="h3 mb-1">LDAP Servers</h1>
+    <p class="text-secondary mb-0">Zarządzaj wieloma katalogami LDAP. Aktywny serwer można przełączać z górnego paska bez restartu aplikacji.</p>
+  </div>
+  <span class="badge text-bg-secondary">{{ servers|length }} configured</span>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header fw-semibold">Add LDAP server</div>
+  <div class="card-body">
+    <form method="post" action="/ldap-servers/create" class="row g-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="col-md-4"><label class="form-label">Name</label><input class="form-control" name="name" required placeholder="Production LDAP"></div>
+      <div class="col-md-4"><label class="form-label">URL</label><input class="form-control" name="url" required value="ldap://" placeholder="ldap://ldap01.example.local:389"></div>
+      <div class="col-md-4"><label class="form-label">Connect timeout</label><input class="form-control" type="number" min="1" max="120" name="connect_timeout" value="10" required></div>
+      <div class="col-md-6"><label class="form-label">Base DN</label><input class="form-control" name="base_dn" required placeholder="dc=example,dc=local"></div>
+      <div class="col-md-6"><label class="form-label">Bind DN</label><input class="form-control" name="bind_dn" required placeholder="cn=admin,dc=example,dc=local"></div>
+      <div class="col-md-6"><label class="form-label">Bind password</label><input class="form-control" type="password" name="bind_password" required autocomplete="new-password"></div>
+      <div class="col-md-6"><label class="form-label">CA certificate path</label><input class="form-control" name="ca_cert" placeholder="/etc/ssl/certs/internal-ca.pem"></div>
+      <div class="col-md-6"><label class="form-label">Users Base DN</label><input class="form-control" name="users_base_dn" placeholder="ou=People,dc=example,dc=local"></div>
+      <div class="col-md-6"><label class="form-label">Groups Base DN</label><input class="form-control" name="groups_base_dn" placeholder="ou=Groups,dc=example,dc=local"></div>
+      <div class="col-12 d-flex flex-wrap gap-4">
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="starttls" id="new-starttls"><label class="form-check-label" for="new-starttls">StartTLS</label></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="verify_tls" id="new-verify" checked><label class="form-check-label" for="new-verify">Verify TLS certificate</label></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled" id="new-enabled" checked><label class="form-check-label" for="new-enabled">Enabled</label></div>
+      </div>
+      <div class="col-12"><button class="btn btn-primary">Add server</button></div>
+    </form>
+  </div>
+</div>
+
+{% if not servers %}
+<div class="alert alert-warning">No LDAP servers are configured in the database. Environment-based LDAP configuration will still be used when available.</div>
+{% endif %}
+
+<div class="vstack gap-3">
+{% for server in servers %}
+  <div class="card">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <span class="fw-semibold">{{ server.name }}</span>
+        <span class="text-secondary ms-2">#{{ server.id }}</span>
+      </div>
+      <div class="d-flex gap-2 align-items-center">
+        {% if server.enabled %}<span class="badge text-bg-success">Enabled</span>{% else %}<span class="badge text-bg-secondary">Disabled</span>{% endif %}
+        {% if server.starttls %}<span class="badge text-bg-info">StartTLS</span>{% endif %}
+        {% if server.url.startswith('ldaps://') %}<span class="badge text-bg-info">LDAPS</span>{% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 mb-3">
+        <div class="col-lg-4"><div class="small text-secondary">URL</div><code>{{ server.url }}</code></div>
+        <div class="col-lg-4"><div class="small text-secondary">Base DN</div><code>{{ server.base_dn }}</code></div>
+        <div class="col-lg-4"><div class="small text-secondary">Bind DN</div><code>{{ server.bind_dn }}</code></div>
+        <div class="col-lg-4"><div class="small text-secondary">Users Base DN</div><code>{{ server.users_base_dn or server.base_dn }}</code></div>
+        <div class="col-lg-4"><div class="small text-secondary">Groups Base DN</div><code>{{ server.groups_base_dn or server.base_dn }}</code></div>
+        <div class="col-lg-4"><div class="small text-secondary">TLS verification</div>{{ 'Enabled' if server.verify_tls else 'Disabled' }}</div>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        {% if server.enabled %}
+        <form method="post" action="/ldap-servers/select">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="server_id" value="{{ server.id }}">
+          <input type="hidden" name="next_url" value="/ldap-servers">
+          <button class="btn btn-sm btn-outline-primary">Use this server</button>
+        </form>
+        {% endif %}
+        <form method="post" action="/ldap-servers/{{ server.id }}/test">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn btn-sm btn-outline-secondary">Test connection</button>
+        </form>
+      </div>
+
+      {% if test_server_id is defined and test_server_id == server.id %}
+      <div class="alert {{ 'alert-success' if test_steps and (test_steps|selectattr('ok')|list|length == test_steps|length) else 'alert-warning' }}">
+        <div class="fw-semibold mb-2">Connection test</div>
+        <ul class="mb-0">
+          {% for step in test_steps %}
+          <li><strong>{{ step.name }}</strong>: {{ 'OK' if step.ok else 'FAILED' }} — {{ step.detail }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <details class="mt-3">
+        <summary class="fw-semibold mb-3">Edit configuration</summary>
+        <form method="post" action="/ldap-servers/{{ server.id }}/update" class="row g-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="col-md-4"><label class="form-label">Name</label><input class="form-control" name="name" value="{{ server.name }}" required></div>
+          <div class="col-md-4"><label class="form-label">URL</label><input class="form-control" name="url" value="{{ server.url }}" required></div>
+          <div class="col-md-4"><label class="form-label">Connect timeout</label><input class="form-control" type="number" min="1" max="120" name="connect_timeout" value="{{ server.connect_timeout }}" required></div>
+          <div class="col-md-6"><label class="form-label">Base DN</label><input class="form-control" name="base_dn" value="{{ server.base_dn }}" required></div>
+          <div class="col-md-6"><label class="form-label">Bind DN</label><input class="form-control" name="bind_dn" value="{{ server.bind_dn }}" required></div>
+          <div class="col-md-6"><label class="form-label">New bind password</label><input class="form-control" type="password" name="bind_password" autocomplete="new-password" placeholder="Leave empty to keep current password"></div>
+          <div class="col-md-6"><label class="form-label">CA certificate path</label><input class="form-control" name="ca_cert" value="{{ server.ca_cert or '' }}"></div>
+          <div class="col-md-6"><label class="form-label">Users Base DN</label><input class="form-control" name="users_base_dn" value="{{ server.users_base_dn or '' }}"></div>
+          <div class="col-md-6"><label class="form-label">Groups Base DN</label><input class="form-control" name="groups_base_dn" value="{{ server.groups_base_dn or '' }}"></div>
+          <div class="col-12 d-flex flex-wrap gap-4">
+            <div class="form-check"><input class="form-check-input" type="checkbox" name="starttls" id="starttls-{{ server.id }}" {{ 'checked' if server.starttls }}><label class="form-check-label" for="starttls-{{ server.id }}">StartTLS</label></div>
+            <div class="form-check"><input class="form-check-input" type="checkbox" name="verify_tls" id="verify-{{ server.id }}" {{ 'checked' if server.verify_tls }}><label class="form-check-label" for="verify-{{ server.id }}">Verify TLS certificate</label></div>
+            <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled" id="enabled-{{ server.id }}" {{ 'checked' if server.enabled }}><label class="form-check-label" for="enabled-{{ server.id }}">Enabled</label></div>
+          </div>
+          <div class="col-12"><button class="btn btn-primary">Save changes</button></div>
+        </form>
+      </details>
+
+      <details class="mt-3 border-top pt-3">
+        <summary class="text-danger fw-semibold">Delete server</summary>
+        <form method="post" action="/ldap-servers/{{ server.id }}/delete" class="row g-2 mt-2 align-items-end">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="col-md-5"><label class="form-label">Type DELETE {{ server.id }}</label><input class="form-control" name="confirmation" required></div>
+          <div class="col-auto"><button class="btn btn-danger">Delete permanently</button></div>
+        </form>
+      </details>
+    </div>
+  </div>
+{% endfor %}
+</div>
+{% endblock %}

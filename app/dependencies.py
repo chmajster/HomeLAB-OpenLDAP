@@ -157,11 +157,50 @@ def _cached_manager(key: tuple, ldap_settings: LDAPSettings, ttl: int) -> LDAPCo
         return manager
 
 
-def get_ldap_manager(db: Session = Depends(get_db)) -> LDAPConnectionManager:
+def _requested_server_id(request: Request) -> tuple[int | None, str | None]:
+    header_value = request.headers.get("X-LDAP-Server-ID")
+    if header_value:
+        try:
+            server_id = int(header_value)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="X-LDAP-Server-ID must be a positive integer") from exc
+        if server_id <= 0:
+            raise HTTPException(status_code=422, detail="X-LDAP-Server-ID must be a positive integer")
+        return server_id, "header"
+
+    if hasattr(request, "session"):
+        session_value = request.session.get("ldap_server_id")
+        if session_value is not None:
+            try:
+                server_id = int(session_value)
+            except (TypeError, ValueError):
+                request.session.pop("ldap_server_id", None)
+            else:
+                if server_id > 0:
+                    return server_id, "session"
+                request.session.pop("ldap_server_id", None)
+    return None, None
+
+
+def _selected_db_server(request: Request, db: Session) -> LDAPServer | None:
+    requested_id, source = _requested_server_id(request)
+    base_query = select(LDAPServer).where(LDAPServer.enabled.is_(True))
+    if requested_id is not None:
+        server = db.scalar(base_query.where(LDAPServer.id == requested_id))
+        if server:
+            return server
+        if source == "header":
+            raise HTTPException(status_code=404, detail="Requested LDAP server does not exist or is disabled")
+        if hasattr(request, "session"):
+            request.session.pop("ldap_server_id", None)
+    return db.scalar(base_query.order_by(LDAPServer.id.asc()))
+
+
+def get_ldap_manager(request: Request, db: Session = Depends(get_db)) -> LDAPConnectionManager:
     settings = get_settings()
     mapping = _attribute_mapping(db)
     mapping_key = tuple(sorted(mapping.items()))
-    server = db.scalar(select(LDAPServer).where(LDAPServer.enabled.is_(True)).order_by(LDAPServer.id.asc()))
+    server = _selected_db_server(request, db)
     if server:
         bind_password = decrypt_secret(server.encrypted_bind_password)
         ldap_settings = LDAPSettings(
