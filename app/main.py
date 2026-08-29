@@ -18,6 +18,7 @@ from app.config import get_settings
 from app.database import init_db
 from app.directory_web import router as directory_web_router
 from app.ldap.connection import LDAPOperationError
+from app.replication_api import router as replication_api_router
 from app.security_api import router as security_api_router
 from app.security_web import router as security_web_router
 from app.server_api import router as server_api_router
@@ -91,6 +92,7 @@ app.include_router(tools_api_router)
 app.include_router(advanced_api_router)
 app.include_router(security_api_router)
 app.include_router(server_api_router)
+app.include_router(replication_api_router)
 app.include_router(web_router)
 app.include_router(directory_web_router)
 app.include_router(tools_web_router)
