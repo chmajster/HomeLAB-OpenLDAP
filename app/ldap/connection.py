@@ -158,11 +158,13 @@ class LDAPConnectionManager:
                 steps.append({"name": "base_dn", "ok": bool(ok), "detail": "Base DN readable" if ok else str(conn.result)})
                 schema_ok = bool(conn.server.schema and conn.server.schema.object_classes)
                 steps.append({"name": "schema", "ok": schema_ok, "detail": "Schema available" if schema_ok else "Schema unavailable"})
-                writable = self._check_write_capability(conn)
-                steps.append({"name": "write_permissions", "ok": writable, "detail": "Write capability detected from authenticated bind" if writable else "Write permission not proven; no destructive probe was executed"})
+                steps.append(
+                    {
+                        "name": "write_permissions",
+                        "ok": None,
+                        "detail": "Not inferred from bind. Use the explicit capability write probe to verify add/modify/delete rights.",
+                    }
+                )
         except Exception as exc:
             steps.append({"name": "connection", "ok": False, "detail": str(exc)})
         return steps
-
-    def _check_write_capability(self, conn: Connection) -> bool:
-        return bool(conn.bound and conn.user)

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}LDAP Capabilities · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div><h1 class="h3 mb-1">LDAP Capability Inspector</h1><div class="text-secondary">Verify what the configured bind account can actually do.</div></div>
+  <a class="btn btn-outline-secondary" href="/ldap-test">Connection test</a>
+</div>
+
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+<div class="card mb-4">
+  <div class="card-header"><strong>Non-destructive checks</strong></div>
+  <div class="card-body">
+    <div class="mb-3"><strong>Bind DN:</strong> <code>{{ result.bind_dn }}</code><br><strong>Base DN:</strong> <code>{{ result.base_dn }}</code></div>
+    <div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Capability</th><th>Result</th><th>LDAP result</th></tr></thead><tbody>
+      {% for check in result.checks %}
+      <tr><td><code>{{ check.capability }}</code></td><td><span class="badge {{ 'text-bg-success' if check.allowed else 'text-bg-danger' }}">{{ 'ALLOWED' if check.allowed else 'DENIED / UNAVAILABLE' }}</span></td><td class="text-secondary">{% if check.result %}{{ check.result.description or check.result.code }} {{ check.result.message or '' }}{% else %}{{ check.detail or '' }}{% endif %}</td></tr>
+      {% endfor %}
+    </tbody></table></div>
+    <div class="alert alert-secondary mt-3 mb-0">{{ result.message }}</div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header"><strong>Explicit write probe</strong></div>
+  <div class="card-body">
+    <p>The probe creates one temporary <code>organizationalRole</code>, modifies its description, deletes it, and attempts cleanup if an intermediate step fails. This is the only reliable way to prove write permissions without pretending that a successful bind implies write access.</p>
+    <form method="post" action="/ldap-capabilities/write-probe" class="row g-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="col-lg-7"><label class="form-label">Probe base DN</label><input class="form-control" name="probe_base_dn" value="{{ ldap.users_base_dn or ldap.base_dn }}"><div class="form-text">Use a dedicated test OU when possible.</div></div>
+      <div class="col-lg-5"><label class="form-label">Confirmation</label><input class="form-control" name="confirmation" placeholder="PROBE WRITE" required></div>
+      <div class="col-12"><button class="btn btn-warning">Run add / modify / delete probe</button></div>
+    </form>
+  </div>
+</div>
+
+{% if probe %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between"><strong>Write probe result</strong><span class="badge {{ 'text-bg-success' if probe.write_permissions == 'allowed' else 'text-bg-danger' }}">{{ probe.write_permissions }}</span></div>
+  <div class="card-body">
+    <div class="mb-3"><strong>Probe DN:</strong> <code>{{ probe.probe_dn }}</code><br><strong>Cleanup:</strong> {{ 'OK' if probe.cleanup_ok else 'FAILED / NOT CREATED' }}</div>
+    <div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Operation</th><th>Allowed</th><th>LDAP result</th></tr></thead><tbody>
+      {% for step in probe.steps %}<tr><td>{{ step.capability }}</td><td><span class="badge {{ 'text-bg-success' if step.allowed else 'text-bg-danger' }}">{{ 'YES' if step.allowed else 'NO' }}</span></td><td class="text-secondary">{{ step.result.description or step.result.code }} {{ step.result.message or '' }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
