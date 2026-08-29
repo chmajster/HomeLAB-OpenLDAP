@@ -20,6 +20,9 @@ from app.config import get_settings
 from app.database import init_db
 from app.directory_web import router as directory_web_router
 from app.ldap.connection import LDAPOperationError
+from app.rbac_api import router as rbac_api_router
+from app.rbac_middleware import RBACWebMiddleware
+from app.rbac_web import router as rbac_web_router
 from app.replication_api import router as replication_api_router
 from app.security_api import router as security_api_router
 from app.security_web import router as security_web_router
@@ -36,6 +39,7 @@ logger = logging.getLogger("homelab-openldap")
 docs_url = "/docs" if settings.enable_docs or not settings.is_production else None
 redoc_url = "/redoc" if settings.enable_docs or not settings.is_production else None
 app = FastAPI(title=settings.app_name, version=settings.version, docs_url=docs_url, redoc_url=redoc_url)
+app.add_middleware(RBACWebMiddleware)
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, max_age=settings.session_max_age, same_site="lax", https_only=settings.session_https_only)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -96,6 +100,7 @@ app.include_router(security_api_router)
 app.include_router(server_api_router)
 app.include_router(replication_api_router)
 app.include_router(capability_api_router)
+app.include_router(rbac_api_router)
 app.include_router(web_router)
 app.include_router(directory_web_router)
 app.include_router(tools_web_router)
@@ -103,3 +108,4 @@ app.include_router(completion_web_router)
 app.include_router(security_web_router)
 app.include_router(server_web_router)
 app.include_router(capability_web_router)
+app.include_router(rbac_web_router)

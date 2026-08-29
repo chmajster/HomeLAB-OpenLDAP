@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Roles · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="mb-4"><h1 class="h3 mb-1">Roles & Permissions</h1><div class="text-secondary">Database-backed RBAC for panel users. Built-in roles remain immutable; custom roles can use granular permissions.</div></div>
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+
+<div class="row g-4">
+  <div class="col-xl-8">
+    {% for role in roles %}
+    {% set perms = decode_permissions(role.permissions) %}
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div><strong>{{ role.name }}</strong> {% if role.built_in %}<span class="badge text-bg-secondary">built-in</span>{% endif %}</div>
+        <span class="text-secondary">{{ assigned.get(role.name, 0) }} users</span>
+      </div>
+      <div class="card-body">
+        {% if role.built_in %}
+          <p class="mb-2">{{ role.description or '' }}</p>
+          <div class="d-flex flex-wrap gap-1">{% for permission in perms %}<span class="badge text-bg-light border">{{ permission }}</span>{% endfor %}</div>
+        {% else %}
+        <form method="post" action="/roles/update">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="name" value="{{ role.name }}">
+          <label class="form-label">Description</label><input class="form-control mb-3" name="description" value="{{ role.description or '' }}">
+          <div class="row g-2 mb-3">
+            {% for permission, description in permission_catalog.items() %}{% if permission != '*' %}
+            <div class="col-md-6"><div class="form-check border rounded p-2 ps-4 h-100"><input class="form-check-input" type="checkbox" name="permissions" value="{{ permission }}" id="role-{{ loop.index }}-{{ role.name|replace(' ', '-') }}" {{ 'checked' if permission in perms }}><label class="form-check-label" for="role-{{ loop.index }}-{{ role.name|replace(' ', '-') }}"><code>{{ permission }}</code><div class="small text-secondary">{{ description }}</div></label></div></div>
+            {% endif %}{% endfor %}
+          </div>
+          <div class="d-flex gap-3 align-items-center"><div class="form-check"><input class="form-check-input" type="checkbox" name="enabled" value="true" id="enabled-{{ role.name|replace(' ', '-') }}" {{ 'checked' if role.enabled }}><label class="form-check-label" for="enabled-{{ role.name|replace(' ', '-') }}">Enabled</label></div><button class="btn btn-primary">Save role</button></div>
+        </form>
+        <hr>
+        <form method="post" action="/roles/delete" class="d-flex gap-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="name" value="{{ role.name }}"><input class="form-control" name="confirmation" placeholder="DELETE ROLE {{ role.name }}" required><button class="btn btn-outline-danger">Delete</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="col-xl-4">
+    <div class="card mb-4">
+      <div class="card-header"><strong>Create custom role</strong></div>
+      <div class="card-body"><form method="post" action="/roles/create">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="form-label">Name</label><input class="form-control mb-3" name="name" maxlength="128" required>
+        <label class="form-label">Description</label><textarea class="form-control mb-3" name="description" rows="2"></textarea>
+        <div class="small text-secondary mb-2">Permissions</div>
+        <div class="vstack gap-2 mb-3">{% for permission, description in permission_catalog.items() %}{% if permission != '*' %}<label class="form-check border rounded p-2 ps-4"><input class="form-check-input" type="checkbox" name="permissions" value="{{ permission }}"><code>{{ permission }}</code><div class="small text-secondary">{{ description }}</div></label>{% endif %}{% endfor %}</div>
+        <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="enabled" value="true" id="new-role-enabled" checked><label class="form-check-label" for="new-role-enabled">Enabled</label></div>
+        <button class="btn btn-primary w-100">Create role</button>
+      </form></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><strong>Assign roles</strong></div>
+      <div class="card-body"><form method="post" action="/roles/assign">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="form-label">Panel user</label><select class="form-select mb-3" name="user_id" required>{% for panel_user in users %}<option value="{{ panel_user.id }}">{{ panel_user.username }} · {{ panel_user.role }}</option>{% endfor %}</select>
+        <label class="form-label">Role</label><select class="form-select mb-3" name="role_name" required>{% for role in roles %}{% if role.enabled %}<option value="{{ role.name }}">{{ role.name }}</option>{% endif %}{% endfor %}</select>
+        <button class="btn btn-outline-primary w-100">Assign role</button>
+      </form></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
