@@ -1,1 +1,26 @@
-{% extends "base.html" %}{% block content %}<nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item">Directory</li><li class="breadcrumb-item active">LDAP Browser</li></ol></nav><h1 class="h3">LDAP Browser</h1><div class="row g-3"><div class="col-lg-4"><div class="card"><div class="card-header">LDAP Tree</div><div class="list-group list-group-flush"><a class="list-group-item list-group-item-action" href="/directory?dn={{ dn|urlencode }}"><strong>{{ dn }}</strong></a>{% for c in children %}<a class="list-group-item list-group-item-action" href="/directory?dn={{ c.dn|urlencode }}">{{ c.dn }}</a>{% else %}<div class="list-group-item text-secondary">Brak obiektów podrzędnych.</div>{% endfor %}</div></div></div><div class="col-lg-8"><div class="card"><div class="card-header">Entry details</div><div class="card-body"><div class="mb-3"><strong>DN</strong><div class="text-break">{{ dn }}</div></div>{% if entry %}<table class="table table-sm"><tbody>{% for k,v in entry.items() %}<tr><th>{{ k }}</th><td><pre class="mb-0 text-wrap">{{ v }}</pre></td></tr>{% endfor %}</tbody></table>{% endif %}</div></div></div></div>{% endblock %}
+{% extends "base.html" %}
+{% block title %}LDAP Browser · {{ app_name }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb">
+  {% for crumb in node.breadcrumbs %}<li class="breadcrumb-item {{ 'active' if loop.last }}">{% if loop.last %}{{ crumb.label }}{% else %}<a href="/directory?dn={{ crumb.dn|urlencode }}">{{ crumb.label }}</a>{% endif %}</li>{% endfor %}
+</ol></nav>
+<div class="d-flex flex-wrap justify-content-between gap-3 align-items-start mb-3">
+  <div><h1 class="h3 mb-1">LDAP Browser 2.0</h1><div class="text-secondary text-break"><code>{{ node.dn }}</code></div></div>
+  <div class="d-flex gap-2">{% if node.parent_dn %}<a class="btn btn-outline-secondary" href="/directory?dn={{ node.parent_dn|urlencode }}"><i class="bi bi-arrow-up"></i> Parent</a>{% endif %}<a class="btn btn-outline-primary" href="{{ node.editor_path }}"><i class="bi bi-pencil-square"></i> Open in editor</a></div>
+</div>
+<div class="row g-4">
+  <div class="col-xl-5">
+    <div class="card mb-3"><div class="card-header d-flex justify-content-between"><strong>Children</strong><span class="badge text-bg-secondary">{{ node.child_count }}</span></div><div class="card-body border-bottom">
+      <form class="d-flex gap-2" method="get" action="/directory"><input type="hidden" name="dn" value="{{ node.dn }}"><input class="form-control" name="q" value="{{ node.query }}" placeholder="Filter cn, ou, uid or mail"><button class="btn btn-outline-primary">Filter</button>{% if node.query %}<a class="btn btn-outline-secondary" href="/directory?dn={{ node.dn|urlencode }}">Clear</a>{% endif %}</form>
+    </div><div class="list-group list-group-flush">
+      {% for child in node.children %}<a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-3" href="/directory?dn={{ child.dn|urlencode }}"><span><i class="bi {% if child.kind == 'ou' %}bi-folder2-open{% elif child.kind == 'user' %}bi-person{% elif child.kind == 'group' %}bi-people{% else %}bi-file-earmark{% endif %} me-2"></i><strong>{{ child.label }}</strong><div class="small text-secondary text-break">{{ child.dn }}</div></span><span class="badge text-bg-light border">{{ child.kind }}</span></a>{% else %}<div class="list-group-item text-secondary">No child entries match the current filter.</div>{% endfor %}
+    </div>{% if node.truncated %}<div class="card-footer text-warning">Result reached the configured child limit.</div>{% endif %}</div>
+    <div class="small text-secondary">REST: <code>/api/v1/browser/node?dn=...</code></div>
+  </div>
+  <div class="col-xl-7">
+    <div class="card"><div class="card-header d-flex justify-content-between"><strong>Entry details</strong><span class="text-secondary">{{ node.entry.objectClass|length if node.entry and node.entry.objectClass else 0 }} objectClasses</span></div><div class="card-body">
+      {% if node.entry %}<div class="table-responsive"><table class="table table-sm align-middle"><tbody>{% for key, value in node.entry|dictsort %}<tr><th style="width:30%"><code>{{ key }}</code></th><td><pre class="mb-0 text-wrap">{{ value }}</pre></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="text-secondary">Entry is not readable or does not exist.</div>{% endif %}
+    </div></div>
+  </div>
+</div>
+{% endblock %}
