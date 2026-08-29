@@ -25,6 +25,8 @@ from app.directory_web import router as directory_web_router
 from app.ldap.connection import LDAPOperationError
 from app.lifecycle_api import router as lifecycle_api_router
 from app.lifecycle_web import router as lifecycle_web_router
+from app.object_history_api import router as object_history_api_router
+from app.object_history_web import router as object_history_web_router
 from app.rbac_api import router as rbac_api_router
 from app.rbac_middleware import RBACWebMiddleware
 from app.rbac_web import router as rbac_web_router
@@ -109,6 +111,7 @@ app.include_router(rbac_api_router)
 app.include_router(lifecycle_api_router)
 app.include_router(directory_health_api_router)
 app.include_router(browser_api_router)
+app.include_router(object_history_api_router)
 app.include_router(web_router)
 app.include_router(directory_web_router)
 app.include_router(tools_web_router)
@@ -119,3 +122,4 @@ app.include_router(capability_web_router)
 app.include_router(rbac_web_router)
 app.include_router(lifecycle_web_router)
 app.include_router(directory_health_web_router)
+app.include_router(object_history_web_router)
