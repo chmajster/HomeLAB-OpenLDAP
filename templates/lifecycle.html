@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Lifecycle Manager · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+  <div><h1 class="h3 mb-1">Lifecycle Manager</h1><div class="text-secondary">Central view of account state, expiry, locks and password-change requirements.</div></div>
+  <form class="d-flex gap-2" method="get" action="/lifecycle">
+    <input class="form-control" name="search" value="{{ search }}" placeholder="User, mail or DN">
+    <select class="form-select" name="state">
+      {% for value in ['all','active','expiring','expired','locked'] %}<option value="{{ value }}" {{ 'selected' if state == value }}>{{ value|title }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-outline-primary">Filter</button>
+  </form>
+</div>
+<div class="row g-3 mb-4">
+  {% for key, label in [('total','Total'),('active','Active'),('expiring','Expiring ≤30d'),('expired','Expired'),('locked','Locked'),('password_reset_required','Password reset')] %}
+  <div class="col-6 col-lg-2"><div class="card h-100"><div class="card-body"><div class="text-secondary small">{{ label }}</div><div class="fs-3 fw-semibold">{{ report.summary[key] }}</div></div></div></div>
+  {% endfor %}
+</div>
+<div class="card"><div class="table-responsive"><table class="table align-middle mb-0">
+<thead><tr><th>User</th><th>Status</th><th>Expires</th><th>Password</th><th>DN</th><th>Actions</th></tr></thead>
+<tbody>
+{% for item in report.items %}
+<tr>
+<td><strong>{{ item.username }}</strong><div class="small text-secondary">{{ item.display_name or item.email or '' }}</div></td>
+<td><span class="badge {% if item.state == 'active' %}text-bg-success{% elif item.state == 'expiring' %}text-bg-warning{% else %}text-bg-danger{% endif %}">{{ item.state }}</span></td>
+<td>{{ item.expires_on or '—' }}</td>
+<td>{% if item.password_reset_required %}<span class="badge text-bg-warning">change required</span>{% else %}<span class="text-secondary">normal</span>{% endif %}</td>
+<td><code class="small">{{ item.dn }}</code></td>
+<td>
+  <form method="post" action="/lifecycle/{{ item.username }}" class="d-flex flex-wrap gap-1">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="confirmation" value="APPLY">
+    {% if item.locked %}<button class="btn btn-sm btn-outline-success" name="action" value="enable">Enable</button>{% else %}<button class="btn btn-sm btn-outline-danger" name="action" value="disable">Disable</button>{% endif %}
+    {% if item.password_reset_required %}<button class="btn btn-sm btn-outline-secondary" name="action" value="clear_password_change">Clear reset</button>{% else %}<button class="btn btn-sm btn-outline-warning" name="action" value="require_password_change">Require reset</button>{% endif %}
+    {% if item.expires_on %}<button class="btn btn-sm btn-outline-secondary" name="action" value="clear_expiry">Clear expiry</button>{% endif %}
+  </form>
+</td>
+</tr>
+{% else %}<tr><td colspan="6" class="text-secondary py-4">No accounts match the current filter.</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}
