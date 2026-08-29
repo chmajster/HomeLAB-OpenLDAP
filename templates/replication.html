@@ -1,8 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Replication · {{ app_name }}{% endblock %}
 {% block content %}
-<div class="mb-4"><h1 class="h3 mb-1">Replication Manager</h1><div class="text-secondary">Configure and inspect OpenLDAP <code>syncrepl</code> on database entries in <code>cn=config</code>.</div></div>
-<div class="alert alert-info">Credentials are redacted in the status view and audit trail. Applying replication writes the bind credential into the selected OpenLDAP configuration entry, as required by syncrepl.</div>
+<div class="mb-4"><h1 class="h3 mb-1">Replication Manager</h1><div class="text-secondary">Configure syncrepl and compare local/provider <code>contextCSN</code> state.</div></div>
+<div class="alert alert-info">Credentials are redacted in status output and audit logs. Live monitoring connects to configured providers using the existing syncrepl bind credentials and compares the newest contextCSN timestamps.</div>
+
+<div class="card mb-4" data-replication-status>
+  <div class="card-header d-flex justify-content-between align-items-center"><strong>Replication health</strong><span id="replication-summary" class="text-secondary">Loading…</span></div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead><tr><th>RID</th><th>Provider</th><th>Search base</th><th>Status</th><th>Lag</th><th>Provider latency</th><th>Error</th></tr></thead>
+      <tbody><tr><td colspan="7" class="text-secondary">Loading replication status…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
 <div class="row g-4">
   <div class="col-xl-7">
     {% for row in rows %}
