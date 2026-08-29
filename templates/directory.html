@@ -6,7 +6,7 @@
 </ol></nav>
 <div class="d-flex flex-wrap justify-content-between gap-3 align-items-start mb-3">
   <div><h1 class="h3 mb-1">LDAP Browser 2.0</h1><div class="text-secondary text-break"><code>{{ node.dn }}</code></div></div>
-  <div class="d-flex gap-2">{% if node.parent_dn %}<a class="btn btn-outline-secondary" href="/directory?dn={{ node.parent_dn|urlencode }}"><i class="bi bi-arrow-up"></i> Parent</a>{% endif %}<a class="btn btn-outline-primary" href="{{ node.editor_path }}"><i class="bi bi-pencil-square"></i> Open in editor</a></div>
+  <div class="d-flex flex-wrap gap-2">{% if node.parent_dn %}<a class="btn btn-outline-secondary" href="/directory?dn={{ node.parent_dn|urlencode }}"><i class="bi bi-arrow-up"></i> Parent</a>{% endif %}<a class="btn btn-outline-secondary" href="/history?dn={{ node.dn|urlencode }}"><i class="bi bi-clock-history"></i> History</a><a class="btn btn-outline-primary" href="{{ node.editor_path }}"><i class="bi bi-pencil-square"></i> Open in editor</a></div>
 </div>
 <div class="row g-4">
   <div class="col-xl-5">
