@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Object History · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+  <div><h1 class="h3 mb-1">Object History</h1><div class="text-secondary text-break"><code>{{ report.dn }}</code></div></div>
+  <a class="btn btn-outline-secondary" href="/directory?dn={{ report.dn|urlencode }}">Open in LDAP Browser</a>
+</div>
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card h-100"><div class="card-body"><div class="small text-secondary">Events</div><div class="fs-2 fw-semibold">{{ report.summary.events }}</div></div></div></div>
+  <div class="col-md-3"><div class="card h-100"><div class="card-body"><div class="small text-secondary">Successful</div><div class="fs-2 fw-semibold">{{ report.summary.success }}</div></div></div></div>
+  <div class="col-md-3"><div class="card h-100"><div class="card-body"><div class="small text-secondary">Failed / other</div><div class="fs-2 fw-semibold">{{ report.summary.failed }}</div></div></div></div>
+  <div class="col-md-3"><div class="card h-100"><div class="card-body"><div class="small text-secondary">Actors</div><div class="fs-2 fw-semibold">{{ report.summary.actors|length }}</div></div></div></div>
+</div>
+<div class="card mb-4"><div class="card-body"><form method="get" action="/history" class="row g-2 align-items-end"><input type="hidden" name="dn" value="{{ report.dn }}"><div class="col-md-4"><label class="form-label">Operation</label><input class="form-control" name="operation" value="{{ operation }}" placeholder="e.g. MODIFY_ENTRY"></div><div class="col-md-3"><label class="form-label">Status</label><input class="form-control" name="status" value="{{ status }}" placeholder="SUCCESS"></div><div class="col-md-2"><label class="form-label">Limit</label><input class="form-control" type="number" name="limit" min="1" max="500" value="{{ limit }}"></div><div class="col-md-3"><button class="btn btn-primary me-2">Apply filters</button><a class="btn btn-outline-secondary" href="/history?dn={{ report.dn|urlencode }}">Clear</a></div></form></div></div>
+<div class="vstack gap-3">
+{% for event in report.items %}
+<div class="card"><div class="card-header d-flex flex-wrap justify-content-between gap-2"><div><strong>{{ event.operation }}</strong> <span class="badge {{ 'text-bg-success' if event.status == 'SUCCESS' else 'text-bg-secondary' }}">{{ event.status }}</span></div><div class="text-secondary small">{{ event.created_at }} · {{ event.panel_user }}</div></div><div class="card-body">
+  <div class="row g-3 mb-3"><div class="col-md-4"><div class="small text-secondary">Operation ID</div><code>{{ event.operation_id }}</code></div><div class="col-md-4"><div class="small text-secondary">Request ID</div><code>{{ event.request_id }}</code></div><div class="col-md-4"><div class="small text-secondary">Source IP</div>{{ event.source_ip or '—' }}</div></div>
+  {% if event.attribute %}<div class="mb-3"><span class="text-secondary">Attribute:</span> <code>{{ event.attribute }}</code></div>{% endif %}
+  {% if event.message %}<div class="alert alert-secondary py-2">{{ event.message }}</div>{% endif %}
+  {% if event.diff %}<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Attribute</th><th>Change</th><th>Old</th><th>New</th></tr></thead><tbody>{% for change in event.diff %}<tr><td><code>{{ change.attribute or event.attribute or 'value' }}</code></td><td><span class="badge text-bg-light border">{{ change.change }}</span></td><td><pre class="mb-0 text-wrap">{{ change.old }}</pre></td><td><pre class="mb-0 text-wrap">{{ change.new }}</pre></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="text-secondary">No value diff was recorded for this event.</div>{% endif %}
+</div></div>
+{% else %}<div class="alert alert-secondary">No audit events match this DN and filters.</div>{% endfor %}
+</div>
+{% endblock %}
