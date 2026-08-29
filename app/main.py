@@ -13,6 +13,8 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.advanced_api import router as advanced_api_router
 from app.api import router as api_router
+from app.capability_api import router as capability_api_router
+from app.capability_web import router as capability_web_router
 from app.completion_web import router as completion_web_router
 from app.config import get_settings
 from app.database import init_db
@@ -93,9 +95,11 @@ app.include_router(advanced_api_router)
 app.include_router(security_api_router)
 app.include_router(server_api_router)
 app.include_router(replication_api_router)
+app.include_router(capability_api_router)
 app.include_router(web_router)
 app.include_router(directory_web_router)
 app.include_router(tools_web_router)
 app.include_router(completion_web_router)
 app.include_router(security_web_router)
 app.include_router(server_web_router)
+app.include_router(capability_web_router)
