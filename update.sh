@@ -23,7 +23,19 @@ rollback(){
   systemctl start homelab-openldap-manager || true
 }
 trap rollback ERR
-if [[ -d "$APP_DIR/.git" ]]; then git -C "$APP_DIR" pull --ff-only; else echo 'Source installation is not a git checkout; run update.sh from a fresh release checkout.' >&2; exit 2; fi
+if [[ -d "$APP_DIR/.git" ]]; then
+  ORIGIN_URL="$(git -C "$APP_DIR" remote get-url origin 2>/dev/null || true)"
+  case "$ORIGIN_URL" in
+    *chmajster/HomeLAB-OpenLDAP*)
+      echo 'Updating Git origin to renamed ImOpenLDAP repository'
+      git -C "$APP_DIR" remote set-url origin https://github.com/chmajster/ImOpenLDAP.git
+      ;;
+  esac
+  git -C "$APP_DIR" pull --ff-only
+else
+  echo 'Source installation is not a git checkout; run update.sh from a fresh release checkout.' >&2
+  exit 2
+fi
 "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 set -a; . "$ETC_DIR/app.env"; set +a
 PYTHONPATH="$APP_DIR" "$APP_DIR/venv/bin/alembic" -c "$APP_DIR/alembic.ini" upgrade head || PYTHONPATH="$APP_DIR" "$APP_DIR/venv/bin/python" -c 'from app.database import init_db; init_db()'

@@ -1,4 +1,4 @@
-# HomeLAB OpenLDAP Manager
+# ImOpenLDAP
 
 Nowoczesny panel administracyjny do zarządzania prawdziwym serwerem OpenLDAP w HomeLAB i małych/średnich środowiskach. Aplikacja nie zastępuje LDAP własną bazą danych: użytkownicy, grupy, OU i atrybuty są odczytywane oraz modyfikowane bezpośrednio przez `ldap3`.
 
@@ -19,7 +19,7 @@ Główne komponenty:
 ## Architecture
 
 ```text
-HomeLAB-OpenLDAP/
+ImOpenLDAP/
 ├── app/
 │   ├── ldap/
 │   │   ├── connection.py
@@ -70,8 +70,8 @@ Obsługiwane połączenia LDAP:
 ## Installation
 
 ```bash
-git clone https://github.com/chmajster/HomeLAB-OpenLDAP.git
-cd HomeLAB-OpenLDAP
+git clone https://github.com/chmajster/ImOpenLDAP.git
+cd ImOpenLDAP
 sudo ./install.sh
 ```
 

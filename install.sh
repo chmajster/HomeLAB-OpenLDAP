@@ -25,8 +25,8 @@ USERS_BASE_DN=""
 GROUPS_BASE_DN=""
 CONFIGURE_NGINX=true
 
-log(){ printf '[HomeLAB-OpenLDAP] %s\n' "$*"; }
-die(){ printf '[HomeLAB-OpenLDAP] ERROR: %s\n' "$*" >&2; exit 1; }
+log(){ printf '[ImOpenLDAP] %s\n' "$*"; }
+die(){ printf '[ImOpenLDAP] ERROR: %s\n' "$*" >&2; exit 1; }
 need_root(){ [[ ${EUID} -eq 0 ]] || die "Run install.sh as root"; }
 
 while [[ $# -gt 0 ]]; do
